@@ -8,7 +8,7 @@
 set -e
 
 INSTALL_DIR="$HOME/capstash-miner"
-REPO="https://github.com/CapStash/capstash-miner-android"
+REPO="https://github.com/scratcher14/capstash-miner-android"
 CONFIG_FILE="$INSTALL_DIR/mining-config.txt"
 
 # ── Colors ────────────────────────────────────────────────────────────────
