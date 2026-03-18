@@ -35,7 +35,7 @@
 #define LOG_ERROR(fmt, ...) fprintf(stderr, "[miner] ERROR: " fmt "\n", ##__VA_ARGS__)
 
 // ── Tuning constants ──────────────────────────────────────────────────────
-#define MAINTENANCE_EVERY    65536
+#define MAINTENANCE_EVERY    524288
 #define HASH_BATCH           4096
 #define MAX_THREADS          64
 #define TEMPLATE_RETRY_SEC   5
@@ -66,6 +66,8 @@ typedef struct {
 
 // ── Thread affinity ───────────────────────────────────────────────────────
 static void set_thread_affinity(int thread_id) {
+    (void)thread_id; // Not supported in Termux/Android
+}
 #ifdef __linux__
     int cores = get_nprocs();
     if (cores <= 0) return;

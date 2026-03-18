@@ -86,7 +86,7 @@ cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DANDROID_BUILD=ON \
-    -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native" \
+    -DCMAKE_C_FLAGS="-O3 -march=armv8.2-a+crypto+sha3 -mtune=cortex-a78 -fomit-frame-pointer -funroll-loops" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
     > /dev/null 2>&1
 
