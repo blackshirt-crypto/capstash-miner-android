@@ -333,9 +333,10 @@ EOF
 # ── reconfigure.sh ────────────────────────────────────────────────────────
 cat > "$INSTALL_DIR/reconfigure.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-curl -fsSL https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/reconfigure.sh -o /tmp/reconfigure.sh
-chmod +x /tmp/reconfigure.sh
-bash /tmp/reconfigure.sh
+curl -fsSL https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/reconfigure.sh -o "$HOME/reconfigure_new.sh"
+chmod +x "$HOME/reconfigure_new.sh"
+bash "$HOME/reconfigure_new.sh"
+rm -f "$HOME/reconfigure_new.sh"
 EOF
 
 # Make all scripts executable
