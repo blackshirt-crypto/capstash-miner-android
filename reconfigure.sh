@@ -17,11 +17,12 @@ show_pool_menu() {
     echo ""
     echo -e "${DIM}Known CapStash pools:${RESET}"
     echo ""
-    echo "  1) crypto-eire.com    — stratum+tcp://crypto-eire.com:3333"
-    echo "  2) capspool.io        — stratum+tcp://capspool.io:3333"
-    echo "  3) papaspool.net      — stratum+tcp://papaspool.net:3333"
-    echo "  4) 1miner.net         — stratum+tcp://1miner.net:3333"
-    echo "  5) Enter manually"
+    echo "  1) crypto-eire.com         — stratum+tcp://stratum.crypto-eire.com:3340"
+    echo "  2) capspool.io PPLNS (CPU) — stratum+tcp://pplns.capspool.io:6333 (shared rewards)"
+    echo "  3) capspool.io Solo  (CPU) — stratum+tcp://caps.capspool.io:6433  (full reward)"
+    echo "  4) papaspool.net           — stratum+tcp://papaspool.net:3333"
+    echo "  5) 1miner.net              — stratum+tcp://1miner.net:3333"
+    echo "  6) Enter manually"
     echo ""
     echo -e "${AMBER}  ⚠ Not all pools have confirmed low difficulty settings.${RESET}"
     echo -e "${AMBER}    Verify your hashrate after connecting or try another pool.${RESET}"
@@ -32,10 +33,11 @@ pick_pool() {
     show_pool_menu
     read -p "Select pool (1-5): " POOL_CHOICE
     case $POOL_CHOICE in
-        1) echo "stratum+tcp://crypto-eire.com:3333" ;;
-        2) echo "stratum+tcp://capspool.io:3333" ;;
-        3) echo "stratum+tcp://papaspool.net:3333" ;;
-        4) echo "stratum+tcp://1miner.net:3333" ;;
+        1) echo "stratum+tcp://stratum.crypto-eire.com:3340" ;;
+        2) echo "stratum+tcp://pplns.capspool.io:6333" ;;
+        3) echo "stratum+tcp://caps.capspool.io:6433" ;;
+        4) echo "stratum+tcp://papaspool.net:3333" ;;
+        5) echo "stratum+tcp://1miner.net:3333" ;;
         *)
             read -p "Pool URL (stratum+tcp://...): " MANUAL_URL
             echo "$MANUAL_URL"
