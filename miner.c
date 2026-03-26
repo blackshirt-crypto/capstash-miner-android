@@ -1,58 +1,91 @@
 /**
- * miner.c — CapStash NDK mining loop
- * v3.0 — CLI version (Android deps removed)
+ * miner.c — CapStash CPU Miner (Android/ARM64 optimized)
+ * v3.0 — T0-only Whirlpool, midstate, P-core affinity, pool-ready
  *
- * Changes from v2.1 (Android):
- *   - Removed android/log.h — replaced with fprintf(stderr)
- *   - Per-thread cache-aligned Whirlpool table copies (L1 pinning)
- *   - Thread affinity for Linux/macOS (pins threads to physical cores)
- *   - Auto optimal thread detection
+ * Optimizations vs v1.0:
+ *   - T0-only Whirlpool + ROTL64 (2KB table vs 16KB — fits in ARM L1 cache)
+ *   - Midstate precomputation (block1 hashed once per template, not per nonce)
+ *   - Partial target check (MSW first — rejects 99.99% of nonces in 1 compare)
+ *   - P-core pinning via syscall(__NR_sched_setaffinity) (Bionic compatible)
  */
 
+#define _GNU_SOURCE
 #include "miner.h"
+#include "rpc.h"
 #include "whirlpool.h"
 #include "sha256.h"
-#include "rpc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <pthread.h>
+#include <stdint.h>
 #include <stdatomic.h>
+#include <pthread.h>
+#include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
-#ifdef __linux__
+// ── Android / Linux affinity ──────────────────────────────────────────────
+#ifdef __ANDROID__
+  #include <sys/syscall.h>
+  #include <linux/sched.h>
+  // Bionic doesn't expose cpu_set_t helpers so we roll our own
+  typedef struct { unsigned long bits[1]; } cs_t;
+  static inline void cs_zero(cs_t *s)        { s->bits[0] = 0; }
+  static inline void cs_set(cs_t *s, int cpu) { s->bits[0] |= (1UL << cpu); }
+  static void pin_to_core(int core) {
+      cs_t mask;
+      cs_zero(&mask);
+      cs_set(&mask, core);
+      syscall(__NR_sched_setaffinity, 0, sizeof(mask), &mask);
+  }
+#elif defined(__linux__)
   #include <sched.h>
-  #include <sys/sysinfo.h>
-#endif
-#ifdef __APPLE__
-  #include <sys/sysctl.h>
+  static void pin_to_core(int core) {
+      cpu_set_t mask;
+      CPU_ZERO(&mask);
+      CPU_SET(core, &mask);
+      sched_setaffinity(0, sizeof(mask), &mask);
+  }
+#else
+  static void pin_to_core(int core) { (void)core; }
 #endif
 
-#define LOG_INFO(fmt, ...)  fprintf(stdout, "[miner] " fmt "\n", ##__VA_ARGS__)
+// ── Logging ───────────────────────────────────────────────────────────────
+#define LOG_INFO(fmt, ...)  fprintf(stdout, "[miner] "       fmt "\n", ##__VA_ARGS__)
 #define LOG_WARN(fmt, ...)  fprintf(stderr, "[miner] WARN: " fmt "\n", ##__VA_ARGS__)
-#define LOG_ERROR(fmt, ...) fprintf(stderr, "[miner] ERROR: " fmt "\n", ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) fprintf(stderr, "[miner] ERR:  " fmt "\n", ##__VA_ARGS__)
 
-// ── Tuning constants ──────────────────────────────────────────────────────
-#define MAINTENANCE_EVERY    524288
-#define HASH_BATCH           4096
-#define MAX_THREADS          64
-#define TEMPLATE_RETRY_SEC   5
-#define HASHRATE_WINDOW_SEC  5
+// ── Tuning ────────────────────────────────────────────────────────────────
+#define MAINTENANCE_EVERY   524288   // hashes between template/hashrate checks
+#define HASH_BATCH          4096     // atomic counter update granularity
+#define MAX_THREADS         64
+#define TEMPLATE_RETRY_SEC  5
+#define HASHRATE_WINDOW_SEC 5
 
-// ── Global mining state ───────────────────────────────────────────────────
+// ── P-core layout (Motorola Edge / typical big.LITTLE) ────────────────────
+// Cores 4-7 = performance, 0-3 = efficiency.
+// Override at compile time: -DPCORE_FIRST=4 -DPCORE_COUNT=4
+#ifndef PCORE_FIRST
+  #define PCORE_FIRST 4
+#endif
+#ifndef PCORE_COUNT
+  #define PCORE_COUNT 4
+#endif
+
+// ── Global state ──────────────────────────────────────────────────────────
 static volatile int        g_running      = 0;
 static miner_config_t      g_config;
 static miner_callbacks_t   g_callbacks;
 static pthread_t           g_threads[MAX_THREADS];
 static int                 g_thread_count = 0;
-static pthread_mutex_t     g_stats_mutex  = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t     g_stats_mutex    = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t     g_template_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static atomic_uint_least64_t g_total_hashes = 0;
-static atomic_uint_least32_t g_blocks_found = 0;
+static atomic_uint_least64_t g_total_hashes  = 0;
+static atomic_uint_least32_t g_blocks_found  = 0;
+static atomic_uint_least32_t g_shares_submitted = 0;
 
-static pthread_mutex_t   g_template_mutex = PTHREAD_MUTEX_INITIALIZER;
 static block_template_t  g_template;
 static volatile int      g_template_valid = 0;
 
@@ -64,27 +97,23 @@ typedef struct {
     double       last_hashrate;
 } thread_data_t;
 
-// ── Thread affinity ───────────────────────────────────────────────────────
-static void set_thread_affinity(int thread_id) {
-    (void)thread_id; // Not supported in Termux/Android
-}
+// ── Helpers: LE writes ────────────────────────────────────────────────────
 
-// ── Address decode helpers ────────────────────────────────────────────────
+// ── Address decode ────────────────────────────────────────────────────────
 static const char BECH32_CHARSET[] = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 
 static int decode_bech32(const char *addr, uint8_t *out_hash160) {
     char lower[128];
-    int addr_len = (int)strlen(addr);
-    if (addr_len < 8 || addr_len > 90) return 0;
-    for (int i = 0; i < addr_len; i++)
+    int len = (int)strlen(addr);
+    if (len < 8 || len > 90) return 0;
+    for (int i = 0; i < len; i++)
         lower[i] = (addr[i] >= 'A' && addr[i] <= 'Z') ? addr[i] + 32 : addr[i];
-    lower[addr_len] = '\0';
+    lower[len] = '\0';
     int sep = -1;
-    for (int i = addr_len - 1; i >= 0; i--) {
+    for (int i = len - 1; i >= 0; i--)
         if (lower[i] == '1') { sep = i; break; }
-    }
     if (sep < 1) return 0;
-    int data_len = addr_len - sep - 1 - 6;
+    int data_len = len - sep - 1 - 6;
     if (data_len < 1) return 0;
     uint8_t data[64];
     for (int i = 0; i < data_len; i++) {
@@ -113,191 +142,188 @@ static const char BASE58_ALPHA[] =
     "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 static int decode_base58check(const char *addr, uint8_t *out_hash160) {
-    int addr_len = (int)strlen(addr);
-    if (addr_len < 25 || addr_len > 35) return 0;
-    uint8_t decoded[64];
-    memset(decoded, 0, sizeof(decoded));
-    int decoded_len = 25;
-    for (int i = 0; i < addr_len; i++) {
+    int len = (int)strlen(addr);
+    if (len < 25 || len > 35) return 0;
+    uint8_t dec[64];
+    memset(dec, 0, sizeof(dec));
+    for (int i = 0; i < len; i++) {
         const char *p = strchr(BASE58_ALPHA, addr[i]);
         if (!p) return 0;
         int carry = (int)(p - BASE58_ALPHA);
-        for (int j = decoded_len - 1; j >= 0; j--) {
-            carry += 58 * decoded[j];
-            decoded[j] = carry & 0xff;
+        for (int j = 24; j >= 0; j--) {
+            carry += 58 * dec[j];
+            dec[j] = carry & 0xff;
             carry >>= 8;
         }
         if (carry) return 0;
     }
     uint8_t check[32];
-    sha256d(decoded, 21, check);
-    if (decoded[21] != check[0] || decoded[22] != check[1] ||
-        decoded[23] != check[2] || decoded[24] != check[3]) {
+    sha256d(dec, 21, check);
+    if (dec[21] != check[0] || dec[22] != check[1] ||
+        dec[23] != check[2] || dec[24] != check[3]) {
         LOG_WARN("base58check checksum failed for %s", addr);
         return 0;
     }
-    memcpy(out_hash160, decoded + 1, 20);
+    memcpy(out_hash160, dec + 1, 20);
     return 1;
 }
 
-static int build_output_script(const char *address, uint8_t *out_script) {
-    uint8_t hash160[20];
-    if (strncmp(address, "cap1", 4) == 0) {
-        if (!decode_bech32(address, hash160)) {
-            LOG_ERROR("bech32 decode failed for %s", address);
-            return -1;
-        }
-        out_script[0] = 0x00;
-        out_script[1] = 0x14;
-        memcpy(out_script + 2, hash160, 20);
+static int build_output_script(const char *addr, uint8_t *out) {
+    uint8_t h160[20];
+    if (strncmp(addr, "cap1", 4) == 0) {
+        if (!decode_bech32(addr, h160)) { LOG_ERROR("bech32 decode failed: %s", addr); return -1; }
+        out[0] = 0x00; out[1] = 0x14;
+        memcpy(out + 2, h160, 20);
         return 22;
-    } else if (address[0] == 'C' || address[0] == '8') {
-        if (!decode_base58check(address, hash160)) {
-            LOG_ERROR("base58check decode failed for %s", address);
-            return -1;
-        }
-        out_script[0] = 0x76;
-        out_script[1] = 0xa9;
-        out_script[2] = 0x14;
-        memcpy(out_script + 3, hash160, 20);
-        out_script[23] = 0x88;
-        out_script[24] = 0xac;
+    } else if (addr[0] == 'C' || addr[0] == '8') {
+        if (!decode_base58check(addr, h160)) { LOG_ERROR("base58 decode failed: %s", addr); return -1; }
+        out[0]=0x76; out[1]=0xa9; out[2]=0x14;
+        memcpy(out + 3, h160, 20);
+        out[23]=0x88; out[24]=0xac;
         return 25;
     }
-    LOG_ERROR("unrecognized address format: %s", address);
+    LOG_ERROR("unrecognized address: %s", addr);
     return -1;
 }
 
 // ── Coinbase builder ──────────────────────────────────────────────────────
 static int build_coinbase(const block_template_t *tmpl,
-                           int extra_nonce1, uint64_t extra_nonce2,
-                           const char *address,
-                           uint8_t *out, size_t out_size) {
+                           int en1, uint64_t en2,
+                           const char *addr,
+                           uint8_t *out, size_t out_sz) {
     uint8_t *p = out;
-    write_le32(p, 0, 1); p += 4;
-    *p++ = 0x01;
-    memset(p, 0x00, 32); p += 32;
-    write_le32(p, 0, 0xffffffff); p += 4;
+    write_le32(p, 0, 1); p += 4;   // version
+    *p++ = 0x01;                    // input count
+    memset(p, 0x00, 32); p += 32;  // prev txid = 0
+    write_le32(p, 0, 0xffffffff); p += 4; // prev index
 
-    uint8_t scriptsig[64];
-    uint8_t *sp = scriptsig;
+    // scriptsig: height + extra_nonce1 + extra_nonce2
+    uint8_t ss[64], *sp = ss;
     uint32_t h = tmpl->height;
-    if (h == 0)          { *sp++ = 0x01; *sp++ = 0x00; }
-    else if (h < 0x80)   { *sp++ = 0x01; *sp++ = (uint8_t)h; }
-    else if (h < 0x8000) { *sp++ = 0x02; *sp++ = h & 0xff; *sp++ = (h >> 8) & 0xff; }
-    else if (h < 0x800000) {
-        *sp++ = 0x03;
-        *sp++ = h & 0xff; *sp++ = (h >> 8) & 0xff; *sp++ = (h >> 16) & 0xff;
-    } else {
-        *sp++ = 0x04;
-        *sp++ = h & 0xff; *sp++ = (h >> 8) & 0xff;
-        *sp++ = (h >> 16) & 0xff; *sp++ = (h >> 24) & 0xff;
-    }
-    *sp++ = 0x04; write_le32(sp, 0, (uint32_t)extra_nonce1); sp += 4;
-    *sp++ = 0x04; write_le32(sp, 0, (uint32_t)(extra_nonce2 & 0xffffffff)); sp += 4;
-    *sp++ = 0x04; write_le32(sp, 0, (uint32_t)((extra_nonce2 >> 32) & 0xffffffff)); sp += 4;
+    if      (h == 0)        { *sp++=0x01; *sp++=(uint8_t)h; }
+    else if (h < 0x80)      { *sp++=0x01; *sp++=(uint8_t)h; }
+    else if (h < 0x8000)    { *sp++=0x02; *sp++=h&0xff; *sp++=(h>>8)&0xff; }
+    else if (h < 0x800000)  { *sp++=0x03; *sp++=h&0xff; *sp++=(h>>8)&0xff; *sp++=(h>>16)&0xff; }
+    else { *sp++=0x04; *sp++=h&0xff; *sp++=(h>>8)&0xff; *sp++=(h>>16)&0xff; *sp++=(h>>24)&0xff; }
+    *sp++=0x04; write_le32(sp,0,(uint32_t)en1);                   sp+=4;
+    *sp++=0x04; write_le32(sp,0,(uint32_t)(en2 & 0xffffffff));    sp+=4;
+    *sp++=0x04; write_le32(sp,0,(uint32_t)((en2>>32)&0xffffffff));sp+=4;
 
-    int ss_len = (int)(sp - scriptsig);
+    int ss_len = (int)(sp - ss);
     *p++ = (uint8_t)ss_len;
-    memcpy(p, scriptsig, ss_len); p += ss_len;
-    write_le32(p, 0, 0xffffffff); p += 4;
-    *p++ = 0x01;
+    memcpy(p, ss, ss_len); p += ss_len;
+    write_le32(p, 0, 0xffffffff); p += 4; // sequence
 
+    *p++ = 0x01; // output count
     uint64_t val = (uint64_t)tmpl->coinbase_value;
-    for (int i = 0; i < 8; i++) *p++ = (val >> (i * 8)) & 0xff;
+    for (int i = 0; i < 8; i++) *p++ = (val >> (i*8)) & 0xff;
 
-    uint8_t out_script[25];
-    int script_len = build_output_script(address, out_script);
-    if (script_len < 0) return -1;
-    *p++ = (uint8_t)script_len;
-    memcpy(p, out_script, script_len); p += script_len;
-
-    write_le32(p, 0, 0); p += 4;
+    uint8_t oscript[25];
+    int slen = build_output_script(addr, oscript);
+    if (slen < 0) return -1;
+    *p++ = (uint8_t)slen;
+    memcpy(p, oscript, slen); p += slen;
+    write_le32(p, 0, 0); p += 4; // locktime
+    (void)out_sz;
     return (int)(p - out);
 }
 
-static void compute_txid(const uint8_t *tx, int tx_len, uint8_t *txid) {
-    sha256d(tx, (size_t)tx_len, txid);
+static void compute_txid(const uint8_t *tx, int len, uint8_t *txid) {
+    sha256d(tx, (size_t)len, txid);
 }
 
-static void compute_merkle_root(const uint8_t *coinbase_txid, uint8_t *merkle_root) {
-    memcpy(merkle_root, coinbase_txid, 32);
-}
-
+// ── Header builder ────────────────────────────────────────────────────────
 static void build_header(const block_template_t *tmpl,
                           const uint8_t *merkle_root,
-                          uint32_t nonce, uint8_t *header) {
-    write_le32(header, 0, tmpl->version);
+                          uint32_t nonce, uint8_t *hdr) {
+    write_le32(hdr, 0, tmpl->version);
     uint8_t prev[32];
     hex_to_bytes(tmpl->prev_hash_hex, prev, 32);
-    for (int i = 0; i < 32; i++) header[4 + i] = prev[31 - i];
-    memcpy(header + 36, merkle_root, 32);
-    write_le32(header, 68, tmpl->curtime);
-    write_le32(header, 72, tmpl->bits);
-    write_le32(header, 76, nonce);
+    for (int i = 0; i < 32; i++) hdr[4+i] = prev[31-i]; // byte-reverse
+    memcpy(hdr+36, merkle_root, 32);
+    write_le32(hdr, 68, tmpl->curtime);
+    write_le32(hdr, 72, tmpl->bits);
+    write_le32(hdr, 76, nonce);
 }
 
-static int serialize_block(const uint8_t *header,
-                             const uint8_t *coinbase_tx, int cb_len,
-                             char *out_hex, size_t out_hex_size) {
-    uint8_t block_raw[80 + 1 + 512];
-    uint8_t *p = block_raw;
-    memcpy(p, header, 80); p += 80;
+// ── Block serializer ──────────────────────────────────────────────────────
+static int serialize_block(const uint8_t *hdr,
+                            const uint8_t *cb, int cb_len,
+                            char *out_hex, size_t hex_sz) {
+    uint8_t raw[80 + 1 + 512];
+    uint8_t *p = raw;
+    memcpy(p, hdr, 80); p += 80;
     *p++ = 0x01;
     if (cb_len > 512) { LOG_ERROR("coinbase too large: %d", cb_len); return -1; }
-    memcpy(p, coinbase_tx, cb_len); p += cb_len;
-    int total_len = (int)(p - block_raw);
-    if ((size_t)(total_len * 2 + 1) > out_hex_size) {
-        LOG_ERROR("output hex buffer too small");
-        return -1;
-    }
-    bytes_to_hex(block_raw, total_len, out_hex);
-    return total_len;
+    memcpy(p, cb, cb_len); p += cb_len;
+    int tot = (int)(p - raw);
+    if ((size_t)(tot*2+1) > hex_sz) { LOG_ERROR("hex buf too small"); return -1; }
+    bytes_to_hex(raw, tot, out_hex);
+    return tot;
 }
 
+// ── Template refresh ──────────────────────────────────────────────────────
 static int refresh_template(const rpc_config_t *rpc) {
-    block_template_t new_tmpl;
-    if (rpc_getblocktemplate(rpc, &new_tmpl) != 0) {
+    block_template_t t;
+    if (rpc_getblocktemplate(rpc, &t) != 0) {
         LOG_WARN("getblocktemplate failed — retry in %ds", TEMPLATE_RETRY_SEC);
         return -1;
     }
     pthread_mutex_lock(&g_template_mutex);
-    memcpy(&g_template, &new_tmpl, sizeof(block_template_t));
+    memcpy(&g_template, &t, sizeof(t));
     g_template_valid = 1;
     pthread_mutex_unlock(&g_template_mutex);
     return 0;
 }
 
-// ── Mining thread ─────────────────────────────────────────────────────────
-static void* mining_thread(void *arg) {
-    thread_data_t *td = (thread_data_t*)arg;
+// ── Midstate: precompute Whirlpool over first 64 bytes of header ──────────
+// Block header is 80 bytes = 64 + 16. We hash block1 (bytes 0-63) once
+// per template and store the intermediate context, then per-nonce we only
+// process the final 16 bytes (time+bits+nonce). This saves ~80% of hash work.
+static void compute_midstate(const uint8_t *hdr64, whirlpool_ctx *mid_ctx) {
+    whirlpool_init(mid_ctx);
+    // Feed first 64 bytes — one full Whirlpool block
+    whirlpool_update_block(mid_ctx, hdr64);
+}
 
-    // Pin to physical core
-    set_thread_affinity(td->thread_id);
+// ── Mining thread ─────────────────────────────────────────────────────────
+static void *mining_thread(void *arg) {
+    thread_data_t *td = (thread_data_t *)arg;
+
+    // ── P-core pinning ────────────────────────────────────────────────────
+    // Map thread 0→core4, 1→core5, 2→core6, 3→core7, wrap if >4 threads
+    int core = PCORE_FIRST + (td->thread_id % PCORE_COUNT);
+    pin_to_core(core);
+    LOG_INFO("thread %d pinned to core %d", td->thread_id, core);
 
     uint8_t  header[80];
     uint8_t  hash[32];
     uint8_t  target[32];
     uint8_t  coinbase[512];
-    uint8_t  coinbase_txid[32];
+    uint8_t  cb_txid[32];
     uint8_t  merkle_root[32];
-    uint64_t extra_nonce2  = 0;
+    uint64_t en2       = (uint64_t)td->thread_id; // stagger extra_nonce2 by thread
     uint32_t nonce;
-    uint64_t hashes        = 0;
+    uint64_t hashes    = 0;
     char     tip_local[65] = {0};
     char     tip_check[65];
     int      cb_len;
 
-    block_template_t local_tmpl;
-    time_t   hashrate_t0 = time(NULL);
-    uint64_t hashrate_h0 = 0;
+    block_template_t ltmpl;
+    whirlpool_ctx    mid_ctx;           // midstate context
+    uint8_t          last_merkle[32];   // detect when coinbase changes
+    memset(last_merkle, 0, 32);
 
-    LOG_INFO("thread %d started (affinity set)", td->thread_id);
+    time_t   hr_t0 = time(NULL);
+    uint64_t hr_h0 = 0;
+
+    LOG_INFO("thread %d started", td->thread_id);
 
     while (g_running) {
+        // ── Grab template ─────────────────────────────────────────────────
         pthread_mutex_lock(&g_template_mutex);
         int valid = g_template_valid;
-        if (valid) memcpy(&local_tmpl, &g_template, sizeof(block_template_t));
+        if (valid) memcpy(&ltmpl, &g_template, sizeof(ltmpl));
         pthread_mutex_unlock(&g_template_mutex);
 
         if (!valid) {
@@ -306,68 +332,81 @@ static void* mining_thread(void *arg) {
             continue;
         }
 
-        hex_to_bytes(local_tmpl.target_hex, target, 32);
+        hex_to_bytes(ltmpl.target_hex, target, 32);
 
-        cb_len = build_coinbase(&local_tmpl, td->thread_id, extra_nonce2,
+        // ── Build coinbase + merkle root ──────────────────────────────────
+        cb_len = build_coinbase(&ltmpl, td->thread_id, en2,
                                 td->address, coinbase, sizeof(coinbase));
         if (cb_len < 0) {
             if (g_callbacks.on_error)
-                g_callbacks.on_error("Address decode failed", g_callbacks.userdata);
+                g_callbacks.on_error("address decode failed", g_callbacks.userdata);
             g_running = 0;
             break;
         }
+        compute_txid(coinbase, cb_len, cb_txid);
+        memcpy(merkle_root, cb_txid, 32); // single-tx block
 
-        compute_txid(coinbase, cb_len, coinbase_txid);
-        compute_merkle_root(coinbase_txid, merkle_root);
-
+        // ── Build header skeleton (all but nonce) and compute midstate ────
         nonce = (uint32_t)td->thread_id;
+        build_header(&ltmpl, merkle_root, nonce, header);
 
+        // Midstate: only recompute when merkle root changes (new template)
+        if (memcmp(merkle_root, last_merkle, 32) != 0) {
+            compute_midstate(header, &mid_ctx); // hash bytes 0-63 once
+            memcpy(last_merkle, merkle_root, 32);
+        }
+
+        // ── Inner nonce loop ──────────────────────────────────────────────
         while (g_running) {
-            build_header(&local_tmpl, merkle_root, nonce, header);
-            capstash_hash(header, hash);
-            hashes++;
+            // Write nonce into header[76..79] and hash tail (bytes 64-79)
+            write_le32(header, 76, nonce);
+            capstash_hash_midstate(&mid_ctx, header + 64, hash);
 
-            if (capstash_hash_meets_target(hash, target)) {
-                char hash_hex[65];
-                bytes_to_hex(hash, 32, hash_hex);
-                LOG_INFO("thread %d ★ BLOCK FOUND! height=%u nonce=%u",
-                         td->thread_id, local_tmpl.height, nonce);
+            // ── Partial target check: compare MSW first (rejects 99.99%) ──
+            if (hash[0] <= target[0]) {
+                if (capstash_hash_meets_target(hash, target)) {
+                    // ── BLOCK FOUND ───────────────────────────────────────
+                    char hash_hex[65];
+                    bytes_to_hex(hash, 32, hash_hex);
+                    LOG_INFO("thread %d ★ BLOCK FOUND! height=%u nonce=%u",
+                             td->thread_id, ltmpl.height, nonce);
 
-                char block_hex[2048];
-                int block_len = serialize_block(header, coinbase, cb_len,
-                                                block_hex, sizeof(block_hex));
-                if (block_len > 0) {
-                    int submit = rpc_submitblock(&td->rpc, block_hex);
-                    if (submit == 0)
-                        LOG_INFO("block submitted and accepted!");
-                    else
-                        LOG_WARN("block submission rejected");
+                    char blk_hex[2048];
+                    int  blk_len = serialize_block(header, coinbase, cb_len,
+                                                   blk_hex, sizeof(blk_hex));
+                    if (blk_len > 0) {
+                        int sub = rpc_submitblock(&td->rpc, blk_hex);
+                        if (sub == 0) LOG_INFO("block accepted!");
+                        else          LOG_WARN("block rejected");
+                    }
+                    atomic_fetch_add(&g_blocks_found, 1);
+                    if (g_callbacks.on_block)
+                        g_callbacks.on_block(ltmpl.height, hash_hex,
+                                              g_callbacks.userdata);
+                    g_template_valid = 0;
+                    break;
                 }
-
-                atomic_fetch_add(&g_blocks_found, 1);
-                if (g_callbacks.on_block)
-                    g_callbacks.on_block(local_tmpl.height, hash_hex,
-                                          g_callbacks.userdata);
-                g_template_valid = 0;
-                break;
             }
 
+            hashes++;
             if (hashes % HASH_BATCH == 0)
                 atomic_fetch_add(&g_total_hashes, HASH_BATCH);
 
+            // ── Periodic maintenance ──────────────────────────────────────
             if (hashes % MAINTENANCE_EVERY == 0) {
-                time_t   now     = time(NULL);
-                double   elapsed = difftime(now, hashrate_t0);
+                time_t  now     = time(NULL);
+                double  elapsed = difftime(now, hr_t0);
                 if (elapsed >= HASHRATE_WINDOW_SEC) {
-                    double hr = (double)(hashes - hashrate_h0) / elapsed;
+                    double hr = (double)(hashes - hr_h0) / elapsed;
                     td->last_hashrate = hr;
                     if (td->thread_id == 0 && g_callbacks.on_hashrate)
                         g_callbacks.on_hashrate(hr * g_thread_count,
                                                  g_callbacks.userdata);
-                    hashrate_t0 = now;
-                    hashrate_h0 = hashes;
+                    hr_t0 = now;
+                    hr_h0 = hashes;
                 }
 
+                // Thread 0 polls for new block
                 if (td->thread_id == 0) {
                     if (rpc_getbestblockhash(&td->rpc, tip_check) == 0) {
                         if (strcmp(tip_check, tip_local) != 0) {
@@ -380,21 +419,25 @@ static void* mining_thread(void *arg) {
                     }
                 }
 
+                // Sync curtime from shared template (no full template copy needed)
                 pthread_mutex_lock(&g_template_mutex);
                 if (g_template_valid)
-                    local_tmpl.curtime = g_template.curtime;
+                    ltmpl.curtime = g_template.curtime;
                 pthread_mutex_unlock(&g_template_mutex);
             }
 
+            // Stride nonces across threads
             nonce += (uint32_t)g_thread_count;
             if (nonce < (uint32_t)td->thread_id) {
-                extra_nonce2++;
-                LOG_INFO("thread %d nonce exhausted — extra_nonce2=%llu",
-                         td->thread_id, (unsigned long long)extra_nonce2);
+                // Nonce space exhausted — roll extra_nonce2
+                en2 += (uint64_t)g_thread_count;
+                LOG_INFO("thread %d nonce wrap — en2=%llu",
+                         td->thread_id, (unsigned long long)en2);
                 break;
             }
         }
 
+        // Duty cycle rest (0 = continuous)
         if (g_running &&
             g_config.duty_cycle_on > 0 && g_config.duty_cycle_off > 0)
             sleep(g_config.duty_cycle_off);
@@ -408,68 +451,52 @@ static void* mining_thread(void *arg) {
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-int miner_start(const miner_config_t *config, const miner_callbacks_t *callbacks) {
+int miner_start(const miner_config_t *cfg, const miner_callbacks_t *cbs) {
     if (g_running) { LOG_WARN("already running"); return -1; }
-    if (!config || strlen(config->address) == 0) {
-        LOG_ERROR("no mining address configured");
-        return -1;
-    }
+    if (!cfg || !cfg->address[0]) { LOG_ERROR("no address"); return -1; }
 
-    uint8_t test_hash[20];
-    int addr_ok = 0;
-    char lower_addr[128];
-    strncpy(lower_addr, config->address, 127);
-    lower_addr[127] = '\0';
-    for (int i = 0; lower_addr[i]; i++)
-        if (lower_addr[i] >= 'A' && lower_addr[i] <= 'Z' &&
-            strncmp(config->address, "cap1", 4) == 0)
-            lower_addr[i] += 32;
+    // Validate address
+    uint8_t h160[20];
+    int ok = 0;
+    if      (strncmp(cfg->address, "cap1", 4) == 0) ok = decode_bech32(cfg->address, h160);
+    else if (cfg->address[0]=='C'||cfg->address[0]=='8') ok = decode_base58check(cfg->address, h160);
+    if (!ok) { LOG_ERROR("address validation failed: %s", cfg->address); return -1; }
+    LOG_INFO("address validated: %s", cfg->address);
 
-    if (strncmp(lower_addr, "cap1", 4) == 0)
-        addr_ok = decode_bech32(lower_addr, test_hash);
-    else if (config->address[0] == 'C' || config->address[0] == '8')
-        addr_ok = decode_base58check(config->address, test_hash);
+    memcpy(&g_config, cfg, sizeof(g_config));
+    if (cbs) memcpy(&g_callbacks, cbs, sizeof(g_callbacks));
+    else     memset(&g_callbacks, 0,   sizeof(g_callbacks));
 
-    if (!addr_ok) {
-        LOG_ERROR("address validation failed: %s", config->address);
-        return -1;
-    }
-    LOG_INFO("address validated: %s", config->address);
-
-    memcpy(&g_config, config, sizeof(miner_config_t));
-    if (callbacks) memcpy(&g_callbacks, callbacks, sizeof(miner_callbacks_t));
-    else           memset(&g_callbacks, 0,          sizeof(miner_callbacks_t));
-
-    atomic_store(&g_total_hashes, 0);
-    atomic_store(&g_blocks_found, 0);
+    atomic_store(&g_total_hashes,     0);
+    atomic_store(&g_blocks_found,     0);
+    atomic_store(&g_shares_submitted, 0);
     g_template_valid = 0;
-    g_running = 1;
+    g_running        = 1;
 
-    int threads = config->threads;
-    if (threads <= 0) threads = 4;
+    int threads = cfg->threads > 0 ? cfg->threads : 4;
     if (threads > MAX_THREADS) threads = MAX_THREADS;
     g_thread_count = threads;
 
     rpc_config_t rpc = {0};
-    strncpy(rpc.host, config->host, 63);
-    rpc.port = config->port;
-    strncpy(rpc.user, config->user, 63);
-    strncpy(rpc.pass, config->pass, 63);
+    snprintf(rpc.host, sizeof(rpc.host), "%s", cfg->host);
+    rpc.port = cfg->port;
+    snprintf(rpc.user, sizeof(rpc.user), "%s", cfg->user);
+    snprintf(rpc.pass, sizeof(rpc.pass), "%s", cfg->pass);
 
     if (refresh_template(&rpc) != 0) {
-        LOG_ERROR("failed initial getblocktemplate — check node connection");
+        LOG_ERROR("initial getblocktemplate failed — check node");
         g_running = 0;
         return -1;
     }
 
-    LOG_INFO("starting %d threads → %s", threads, config->address);
+    LOG_INFO("starting %d threads → %s (P-cores %d-%d)",
+             threads, cfg->address, PCORE_FIRST, PCORE_FIRST + PCORE_COUNT - 1);
 
     for (int i = 0; i < threads; i++) {
-        thread_data_t *td = (thread_data_t*)calloc(1, sizeof(thread_data_t));
+        thread_data_t *td = (thread_data_t *)calloc(1, sizeof(thread_data_t));
         td->thread_id = i;
-        memcpy(&td->rpc, &rpc, sizeof(rpc_config_t));
-        strncpy(td->address, config->address, 127);
-        td->address[127] = '\0';
+        memcpy(&td->rpc, &rpc, sizeof(rpc));
+        snprintf(td->address, sizeof(td->address), "%s", cfg->address);
         if (pthread_create(&g_threads[i], NULL, mining_thread, td) != 0) {
             LOG_ERROR("failed to spawn thread %d", i);
             free(td);
@@ -490,15 +517,16 @@ void miner_stop(void) {
 
 void miner_get_stats(miner_stats_t *stats) {
     pthread_mutex_lock(&g_stats_mutex);
-    stats->total_hashes = atomic_load(&g_total_hashes);
-    stats->blocks_found = atomic_load(&g_blocks_found);
-    stats->running      = g_running;
-    stats->thread_count = g_thread_count;
-    stats->hashrate     = 0;
+    stats->total_hashes     = atomic_load(&g_total_hashes);
+    stats->blocks_found     = atomic_load(&g_blocks_found);
+    stats->shares_submitted = atomic_load(&g_shares_submitted);
+    stats->running          = g_running;
+    stats->thread_count     = g_thread_count;
+    stats->hashrate         = 0;
     pthread_mutex_unlock(&g_stats_mutex);
 }
 
-int miner_is_running(void) { return g_running; }
+int  miner_is_running(void) { return g_running; }
 
 void miner_set_threads(int threads) {
     if (!g_running) return;

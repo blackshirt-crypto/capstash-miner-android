@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  CapStash Miner — Reconfiguration Menu
+#  CapStash Miner v3.0 — Reconfiguration Menu
 # ============================================================
 
 INSTALL_DIR="$HOME/capstash-miner"
@@ -12,6 +12,37 @@ RED='\033[38;5;196m'
 DIM='\033[2m'
 RESET='\033[0m'
 
+# ── Pool list (shared with setup) ─────────────────────────────────────────
+show_pool_menu() {
+    echo ""
+    echo -e "${DIM}Known CapStash pools:${RESET}"
+    echo ""
+    echo "  1) crypto-eire.com    — stratum+tcp://crypto-eire.com:3333"
+    echo "  2) capspool.io        — stratum+tcp://capspool.io:3333"
+    echo "  3) papaspool.net      — stratum+tcp://papaspool.net:3333"
+    echo "  4) 1miner.net         — stratum+tcp://1miner.net:3333"
+    echo "  5) Enter manually"
+    echo ""
+    echo -e "${AMBER}  ⚠ Not all pools have confirmed low difficulty settings.${RESET}"
+    echo -e "${AMBER}    Verify your hashrate after connecting or try another pool.${RESET}"
+    echo ""
+}
+
+pick_pool() {
+    show_pool_menu
+    read -p "Select pool (1-5): " POOL_CHOICE
+    case $POOL_CHOICE in
+        1) echo "stratum+tcp://crypto-eire.com:3333" ;;
+        2) echo "stratum+tcp://capspool.io:3333" ;;
+        3) echo "stratum+tcp://papaspool.net:3333" ;;
+        4) echo "stratum+tcp://1miner.net:3333" ;;
+        *)
+            read -p "Pool URL (stratum+tcp://...): " MANUAL_URL
+            echo "$MANUAL_URL"
+            ;;
+    esac
+}
+
 if [ ! -f "$CONFIG_FILE" ]; then
     echo -e "${RED}No config found. Run setup first.${RESET}"
     exit 1
@@ -22,15 +53,15 @@ source "$CONFIG_FILE"
 clear
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════╗${RESET}"
-echo -e "${GREEN}║     CAPSTASH MINER — RECONFIGURE          ║${RESET}"
+echo -e "${GREEN}║   CAPSTASH MINER v3.0 — RECONFIGURE       ║${RESET}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${RESET}"
 echo ""
 echo -e "${DIM}Current configuration:${RESET}"
-echo -e "  Mode:     $MINING_MODE"
-echo -e "  Node/Pool: $POOL_URL"
-echo -e "  Address:  $REWARD_ADDRESS"
-echo -e "  Threads:  $THREADS"
-echo -e "  Worker:   ${WORKER_NAME:-phone}"
+echo -e "  Mode:      $MINING_MODE"
+echo -e "  Pool/Node: $POOL_URL"
+echo -e "  Worker:    ${STRATUM_USER:-$WORKER_NAME}"
+echo -e "  Address:   $REWARD_ADDRESS"
+echo -e "  Threads:   $THREADS"
 echo ""
 echo -e "${AMBER}What would you like to change?${RESET}"
 echo ""
@@ -40,7 +71,7 @@ echo "  3) RPC credentials / Pool password"
 echo "  4) Reward address"
 echo "  5) Thread count"
 echo "  6) Worker name"
-echo "  7) Change everything (full reconfigure)"
+echo "  7) Full reconfigure (re-run setup)"
 echo "  8) Exit — no changes"
 echo ""
 read -p "Select option (1-8): " CHOICE
@@ -66,9 +97,13 @@ case $CHOICE in
         POOL_PASS="$RPC_PASS"
     else
         MINING_MODE="pool"
-        read -p "Pool URL (stratum+tcp://...): " POOL_URL
-        read -p "Wallet.worker: " STRATUM_USER
+        POOL_URL=$(pick_pool)
+        read -p "Wallet address: " WALLET_ADDR
+        read -p "Worker name [phone-1]: " WORKER_NAME
+        WORKER_NAME=${WORKER_NAME:-phone-1}
+        STRATUM_USER="${WALLET_ADDR}.${WORKER_NAME}"
         POOL_PASS="x"
+        echo -e "${DIM}Pool worker: $STRATUM_USER${RESET}"
     fi
     ;;
 
@@ -80,8 +115,14 @@ case $CHOICE in
         NODE_PORT=${NODE_PORT:-8332}
         POOL_URL="http://${NODE_IP}:${NODE_PORT}"
     else
-        read -p "New pool URL (stratum+tcp://...): " POOL_URL
-        read -p "Backup pool URL (leave blank to skip): " BACKUP_URL
+        POOL_URL=$(pick_pool)
+        echo ""
+        echo -e "${DIM}Update backup pool too?${RESET}"
+        read -p "(y/n): " UPD_BACKUP
+        if [ "$UPD_BACKUP" = "y" ]; then
+            echo "Backup pool:"
+            BACKUP_URL=$(pick_pool)
+        fi
     fi
     ;;
 
@@ -105,23 +146,44 @@ case $CHOICE in
         read -p "Continue? (y/n): " CONT
         [ "$CONT" != "y" ] && exit 1
     fi
+    # Update stratum user with new address if pool mode
+    if [ "$MINING_MODE" = "pool" ]; then
+        STRATUM_USER="${REWARD_ADDRESS}.${WORKER_NAME:-phone-1}"
+        echo -e "${DIM}Updated pool worker: $STRATUM_USER${RESET}"
+    fi
     ;;
 
   5)
     echo ""
-    CORE_COUNT=$(nproc)
-    OPTIMAL=$((CORE_COUNT / 2))
-    echo -e "${DIM}Device has $CORE_COUNT threads. Recommended: $OPTIMAL${RESET}"
-    read -p "Thread count [$OPTIMAL]: " THREADS
-    THREADS=${THREADS:-$OPTIMAL}
+    echo -e "${DIM}Detecting CPU core layout...${RESET}"
+    P_CORES=0
+    E_CORES=0
+    while IFS= read -r line; do
+        part=$(echo "$line" | grep -o "0x[0-9a-fA-F]*" | head -1)
+        case $part in
+            0xd41|0xd44|0xd46|0xd47|0xd48|0xd4b|0xd4d)
+                P_CORES=$((P_CORES + 1)) ;;
+            *)
+                E_CORES=$((E_CORES + 1)) ;;
+        esac
+    done < <(grep "CPU part" /proc/cpuinfo)
+    TOTAL=$((P_CORES + E_CORES))
+    [ $P_CORES -eq 0 ] && P_CORES=$((TOTAL / 2))
+    [ $P_CORES -lt 1 ] && P_CORES=1
+    echo ""
+    echo -e "${DIM}Total: $TOTAL  |  Performance: $P_CORES  |  Efficiency: $E_CORES${RESET}"
+    echo -e "${AMBER}  ⚠ Never exceed your P-core count — E-cores kill hashrate${RESET}"
+    echo ""
+    read -p "Thread count [$P_CORES]: " THREADS
+    THREADS=${THREADS:-$P_CORES}
     ;;
 
   6)
     echo ""
     read -p "Worker name (e.g. phone-1): " WORKER_NAME
     if [ "$MINING_MODE" = "pool" ]; then
-        read -p "Wallet address for pool user: " WALLET_ADDR
-        STRATUM_USER="${WALLET_ADDR}.${WORKER_NAME}"
+        STRATUM_USER="${REWARD_ADDRESS}.${WORKER_NAME}"
+        echo -e "${DIM}Updated pool worker: $STRATUM_USER${RESET}"
     fi
     ;;
 
@@ -143,7 +205,7 @@ esac
 
 # ── Save updated config ───────────────────────────────────────────────────
 cat > "$CONFIG_FILE" << EOF
-# CapStash Miner Configuration
+# CapStash Miner v3.0.0 Configuration
 # Updated: $(date)
 
 MINING_MODE=$MINING_MODE
@@ -156,7 +218,7 @@ THREADS=$THREADS
 WORKER_NAME=${WORKER_NAME:-phone}
 EOF
 
-# ── Rewrite start.sh with new settings ───────────────────────────────────
+# ── Rewrite start.sh ──────────────────────────────────────────────────────
 if [ "$MINING_MODE" = "solo" ]; then
 cat > "$INSTALL_DIR/start.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash

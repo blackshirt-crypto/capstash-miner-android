@@ -1,8 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  CapStash Miner — Termux Setup Script
+#  CapStash Miner v3.0 — Termux Setup Script
 #  Whirlpool-512 CPU miner for CapStash
-#  github.com/CapStash/capstash-miner-android
+#  github.com/scratcher14/capstash-miner-android
 # ============================================================
 
 set -e
@@ -10,6 +10,7 @@ set -e
 INSTALL_DIR="$HOME/capstash-miner"
 REPO="https://github.com/scratcher14/capstash-miner-android"
 CONFIG_FILE="$INSTALL_DIR/mining-config.txt"
+MINER_VERSION="3.0.0"
 
 # ── Colors ────────────────────────────────────────────────────────────────
 GREEN='\033[38;5;82m'
@@ -22,9 +23,9 @@ RESET='\033[0m'
 clear
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════╗${RESET}"
-echo -e "${GREEN}║         CAPSTASH MINER SETUP              ║${RESET}"
-echo -e "${GREEN}║    Whirlpool-512 · Android CPU Miner      ║${RESET}"
-echo -e "${GREEN}║    github.com/CapStash                    ║${RESET}"
+echo -e "${GREEN}║      CAPSTASH MINER v3.0 SETUP            ║${RESET}"
+echo -e "${GREEN}║   Whirlpool-512 · Android CPU Miner       ║${RESET}"
+echo -e "${GREEN}║   github.com/scratcher14                  ║${RESET}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${RESET}"
 echo ""
 
@@ -76,7 +77,7 @@ echo -e "${GREEN}✓ Source downloaded${RESET}"
 echo -e "${AMBER}[4/6] Building miner (optimized for your CPU)...${RESET}"
 echo -e "${DIM}This takes 1-3 minutes on most devices...${RESET}"
 
-CPU_INFO=$(cat /proc/cpuinfo | grep "Hardware" | head -1 || echo "ARM64")
+CPU_INFO=$(grep "Hardware" /proc/cpuinfo 2>/dev/null | head -1 || echo "ARM64")
 echo -e "${DIM}Detected: $CPU_INFO${RESET}"
 
 mkdir -p build
@@ -86,7 +87,7 @@ cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang \
     -DANDROID_BUILD=ON \
-    -DCMAKE_C_FLAGS="-O3 -march=armv8.2-a+crypto+sha3 -mtune=cortex-a78 -fomit-frame-pointer -funroll-loops" \
+    -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
     > /dev/null 2>&1
 
@@ -102,7 +103,7 @@ echo -e "${AMBER}[5/6] Configuration${RESET}"
 echo -e "${DIM}────────────────────────────────────────────${RESET}"
 echo ""
 
-# Mining mode
+# ── Mining mode ───────────────────────────────────────────────────────────
 echo "Mining Mode:"
 echo "  1) Solo   — connect directly to your CapStash node via RPC"
 echo "  2) Pool   — connect to a mining pool via stratum"
@@ -110,53 +111,133 @@ echo ""
 read -p "Select mode (1/2): " MODE_CHOICE
 
 if [ "$MODE_CHOICE" = "1" ]; then
+    # ── Solo mode ─────────────────────────────────────────────────────────
     MINING_MODE="solo"
     echo ""
-    echo -e "${DIM}Solo mining connects to your CapStash node.${RESET}"
+    echo -e "${DIM}Solo mining connects directly to your CapStash node.${RESET}"
     echo -e "${DIM}Your node must have server=1 and rpcbind set in CapStash.conf${RESET}"
     echo ""
-    read -p "Node IP address (e.g. 100.x.x.x or 192.168.1.x): " NODE_IP
+    read -p "Node IP address (e.g. 192.168.1.x or 100.x.x.x Tailscale): " NODE_IP
     read -p "RPC port [8332]: " NODE_PORT
     NODE_PORT=${NODE_PORT:-8332}
     read -p "RPC username: " RPC_USER
     read -s -p "RPC password: " RPC_PASS
     echo ""
     POOL_URL="http://${NODE_IP}:${NODE_PORT}"
-    POOL_PASS="$RPC_PASS"
     STRATUM_USER="$RPC_USER"
+    POOL_PASS="$RPC_PASS"
+    BACKUP_URL=""
+    WORKER_NAME="phone"
+
 else
+    # ── Pool mode ─────────────────────────────────────────────────────────
     MINING_MODE="pool"
     echo ""
-    echo -e "${DIM}Pool mining uses stratum protocol.${RESET}"
-    echo -e "${DIM}Format: stratum+tcp://pool.address:port${RESET}"
+    echo -e "${DIM}Known CapStash pools:${RESET}"
     echo ""
-    read -p "Primary pool URL: " POOL_URL
-    read -p "Backup pool URL (leave blank to skip): " BACKUP_URL
+    echo "  1) crypto-eire.com    — stratum+tcp://crypto-eire.com:3333"
+    echo "  2) capspool.io        — stratum+tcp://capspool.io:3333"
+    echo "  3) papaspool.net      — stratum+tcp://papaspool.net:3333"
+    echo "  4) 1miner.net         — stratum+tcp://1miner.net:3333"
+    echo "  5) Enter manually"
+    echo ""
+    echo -e "${AMBER}  ⚠ Not all pools have confirmed low difficulty settings.${RESET}"
+    echo -e "${AMBER}    Verify your hashrate after connecting or try another pool.${RESET}"
+    echo ""
+    read -p "Select pool (1-5): " POOL_CHOICE
+
+    case $POOL_CHOICE in
+        1) POOL_URL="stratum+tcp://crypto-eire.com:3333" ;;
+        2) POOL_URL="stratum+tcp://capspool.io:3333" ;;
+        3) POOL_URL="stratum+tcp://papaspool.net:3333" ;;
+        4) POOL_URL="stratum+tcp://1miner.net:3333" ;;
+        5)
+            read -p "Primary pool URL (stratum+tcp://...): " POOL_URL
+            ;;
+        *)
+            echo -e "${RED}Invalid selection — defaulting to manual entry${RESET}"
+            read -p "Primary pool URL (stratum+tcp://...): " POOL_URL
+            ;;
+    esac
+
+    # Backup pool
+    echo ""
+    echo -e "${DIM}Backup pool (used by start-backup.sh):${RESET}"
+    echo "  1) crypto-eire.com"
+    echo "  2) capspool.io"
+    echo "  3) papaspool.net"
+    echo "  4) 1miner.net"
+    echo "  5) Enter manually"
+    echo "  6) Skip — no backup"
+    echo ""
+    read -p "Select backup (1-6): " BACKUP_CHOICE
+
+    case $BACKUP_CHOICE in
+        1) BACKUP_URL="stratum+tcp://crypto-eire.com:3333" ;;
+        2) BACKUP_URL="stratum+tcp://capspool.io:3333" ;;
+        3) BACKUP_URL="stratum+tcp://papaspool.net:3333" ;;
+        4) BACKUP_URL="stratum+tcp://1miner.net:3333" ;;
+        5) read -p "Backup pool URL: " BACKUP_URL ;;
+        *) BACKUP_URL="" ;;
+    esac
+
+    # Worker name
+    echo ""
     read -p "Worker name (e.g. phone-1): " WORKER_NAME
-    STRATUM_USER="WALLET_ADDRESS.$WORKER_NAME"
+    WORKER_NAME=${WORKER_NAME:-phone-1}
     POOL_PASS="x"
 fi
 
-# Reward address
+# ── Reward address ────────────────────────────────────────────────────────
 echo ""
-read -p "CapStash reward address (cap1... or C...): " REWARD_ADDRESS
+read -p "CapStash reward address (cap1... or C... or 8...): " REWARD_ADDRESS
 
-# Validate address format
 if [[ ! "$REWARD_ADDRESS" =~ ^(cap1|C|8) ]]; then
-    echo -e "${AMBER}Warning: Address doesn't look like a CapStash address (cap1..., C..., 8...)${RESET}"
+    echo -e "${AMBER}Warning: Address doesn't look like a CapStash address${RESET}"
     read -p "Continue anyway? (y/n): " ADDR_CONT
     [ "$ADDR_CONT" != "y" ] && exit 1
 fi
 
-# Thread count
-CORE_COUNT=$(nproc)
-OPTIMAL=$((CORE_COUNT / 2))
-[ $OPTIMAL -lt 1 ] && OPTIMAL=1
+# Pool mode: build stratum user from address + worker
+if [ "$MINING_MODE" = "pool" ]; then
+    STRATUM_USER="${REWARD_ADDRESS}.${WORKER_NAME}"
+    echo -e "${DIM}Pool worker: $STRATUM_USER${RESET}"
+fi
+
+# ── Thread count ──────────────────────────────────────────────────────────
+# Detect P-cores vs E-cores from /proc/cpuinfo CPU part numbers
+# High part numbers = performance cores (A76/A78/X1/X2), low = efficiency (A55/A53)
 echo ""
-echo -e "${DIM}Your device has $CORE_COUNT CPU threads.${RESET}"
-echo -e "${DIM}Recommended: $OPTIMAL threads (50% avoids thermal throttling)${RESET}"
-read -p "Threads to use [$OPTIMAL]: " THREADS
-THREADS=${THREADS:-$OPTIMAL}
+echo -e "${DIM}Detecting CPU core layout...${RESET}"
+
+P_CORES=0
+E_CORES=0
+while IFS= read -r line; do
+    part=$(echo "$line" | grep -o "0x[0-9a-fA-F]*" | head -1)
+    case $part in
+        0xd41|0xd44|0xd46|0xd47|0xd48|0xd4b|0xd4d)
+            P_CORES=$((P_CORES + 1)) ;;  # A76, X1, A78, X2, X3, X4
+        *)
+            E_CORES=$((E_CORES + 1)) ;;  # A55, A53, etc
+    esac
+done < <(grep "CPU part" /proc/cpuinfo)
+
+TOTAL_CORES=$((P_CORES + E_CORES))
+[ $P_CORES -eq 0 ] && P_CORES=$((TOTAL_CORES / 2))
+[ $P_CORES -lt 1 ] && P_CORES=1
+
+echo ""
+echo -e "${DIM}Total cores: $TOTAL_CORES  |  Performance: $P_CORES  |  Efficiency: $E_CORES${RESET}"
+echo ""
+echo -e "${DIM}Hashrate guide (Whirlpool-512, optimized):${RESET}"
+echo -e "${DIM}  1 P-core  → ~840 KH/s${RESET}"
+echo -e "${DIM}  2 P-cores → ~1.68 MH/s${RESET}"
+echo -e "${DIM}  3 P-cores → ~2.52 MH/s${RESET}"
+echo -e "${DIM}  4 P-cores → ~5.77 MH/s  ← sweet spot${RESET}"
+echo -e "${AMBER}  ⚠ Never exceed your P-core count — E-cores kill hashrate${RESET}"
+echo ""
+read -p "Threads to use [$P_CORES]: " THREADS
+THREADS=${THREADS:-$P_CORES}
 
 # ── Step 6: Write config and scripts ─────────────────────────────────────
 echo ""
@@ -164,7 +245,7 @@ echo -e "${AMBER}[6/6] Writing configuration...${RESET}"
 
 # Save config
 cat > "$CONFIG_FILE" << EOF
-# CapStash Miner Configuration
+# CapStash Miner v${MINER_VERSION} Configuration
 # Generated: $(date)
 
 MINING_MODE=$MINING_MODE
@@ -177,7 +258,7 @@ THREADS=$THREADS
 WORKER_NAME=${WORKER_NAME:-phone}
 EOF
 
-# Write start.sh (solo mode)
+# ── Write start.sh ────────────────────────────────────────────────────────
 if [ "$MINING_MODE" = "solo" ]; then
 cat > "$INSTALL_DIR/start.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
@@ -190,13 +271,11 @@ echo -e "\033[2mThreads: $THREADS\033[0m"
 echo ""
 ./capstash-miner \\
     --url "$POOL_URL" \\
-    --user "$RPC_USER" \\
-    --pass "$RPC_PASS" \\
+    --user "$STRATUM_USER" \\
+    --pass "$POOL_PASS" \\
     --address "$REWARD_ADDRESS" \\
     --threads $THREADS
 EOF
-
-# Write start.sh (pool mode)
 else
 cat > "$INSTALL_DIR/start.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
@@ -216,12 +295,16 @@ echo ""
 EOF
 fi
 
-# Backup pool start script (pool mode only)
+# ── Backup pool script (pool mode only) ───────────────────────────────────
 if [ "$MINING_MODE" = "pool" ] && [ -n "$BACKUP_URL" ]; then
 cat > "$INSTALL_DIR/start-backup.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 cd "$INSTALL_DIR"
+echo ""
 echo -e "\033[38;5;214m[capstash-miner] Starting on BACKUP pool...\033[0m"
+echo -e "\033[2mPool:    $BACKUP_URL\033[0m"
+echo -e "\033[2mWorker:  $STRATUM_USER\033[0m"
+echo ""
 ./capstash-miner \\
     --url "$BACKUP_URL" \\
     --user "$STRATUM_USER" \\
@@ -232,27 +315,27 @@ EOF
 chmod +x "$INSTALL_DIR/start-backup.sh"
 fi
 
-# reconfigure.sh
-cat > "$INSTALL_DIR/reconfigure.sh" << 'RECONF'
-#!/data/data/com.termux/files/usr/bin/bash
-echo ""
-echo -e "\033[38;5;82m[capstash-miner] Reconfiguration\033[0m"
-echo ""
-curl -fsSL https://raw.githubusercontent.com/CapStash/capstash-miner-android/main/setup_capstash_miner.sh | bash
-RECONF
-
-# info.sh
+# ── info.sh ───────────────────────────────────────────────────────────────
 cat > "$INSTALL_DIR/info.sh" << EOF
 #!/data/data/com.termux/files/usr/bin/bash
 echo ""
-echo -e "\033[38;5;82m[capstash-miner] Current Configuration\033[0m"
+echo -e "\033[38;5;82m[capstash-miner v${MINER_VERSION}] Current Configuration\033[0m"
 echo -e "\033[2m────────────────────────────────────────\033[0m"
 source "$CONFIG_FILE"
-echo -e "  Mode:     \$MINING_MODE"
+echo -e "  Mode:      \$MINING_MODE"
 echo -e "  Pool/Node: \$POOL_URL"
-echo -e "  Address:  \$REWARD_ADDRESS"
-echo -e "  Threads:  \$THREADS"
+echo -e "  Worker:    \$STRATUM_USER"
+echo -e "  Address:   \$REWARD_ADDRESS"
+echo -e "  Threads:   \$THREADS"
 echo ""
+EOF
+
+# ── reconfigure.sh ────────────────────────────────────────────────────────
+cat > "$INSTALL_DIR/reconfigure.sh" << 'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+curl -fsSL https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/reconfigure.sh -o /tmp/reconfigure.sh
+chmod +x /tmp/reconfigure.sh
+bash /tmp/reconfigure.sh
 EOF
 
 # Make all scripts executable
@@ -267,16 +350,25 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║         SETUP COMPLETE ✓                  ║${RESET}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${RESET}"
 echo ""
-echo -e "  ${GREEN}Start mining:${RESET}    cd ~/capstash-miner && ./start.sh"
-echo -e "  ${GREEN}View config:${RESET}     cd ~/capstash-miner && ./info.sh"
-echo -e "  ${GREEN}Reconfigure:${RESET}     cd ~/capstash-miner && ./reconfigure.sh"
+echo -e "  Mode:     ${GREEN}$MINING_MODE${RESET}"
+if [ "$MINING_MODE" = "pool" ]; then
+echo -e "  Pool:     ${DIM}$POOL_URL${RESET}"
+echo -e "  Worker:   ${DIM}$STRATUM_USER${RESET}"
+else
+echo -e "  Node:     ${DIM}$POOL_URL${RESET}"
+fi
+echo -e "  Address:  ${DIM}$REWARD_ADDRESS${RESET}"
+echo -e "  Threads:  ${DIM}$THREADS${RESET}"
 echo ""
-echo -e "  ${AMBER}Keep mining in background:${RESET}"
+echo -e "  ${GREEN}Start mining:${RESET}  cd ~/capstash-miner && ./start.sh"
+echo -e "  ${GREEN}View config:${RESET}   cd ~/capstash-miner && ./info.sh"
+echo -e "  ${GREEN}Reconfigure:${RESET}   cd ~/capstash-miner && ./reconfigure.sh"
+echo ""
+echo -e "  ${AMBER}Keep mining after closing Termux:${RESET}"
 echo -e "  ${DIM}  termux-wake-lock${RESET}"
 echo -e "  ${DIM}  ./start.sh${RESET}"
-echo -e "  ${DIM}  (close Termux — mining continues)${RESET}"
+echo -e "  ${DIM}  (close Termux window — mining continues)${RESET}"
 echo ""
 echo -e "  ${AMBER}To stop:${RESET}"
-echo -e "  ${DIM}  Press Ctrl+C in Termux${RESET}"
-echo -e "  ${DIM}  termux-wake-unlock${RESET}"
+echo -e "  ${DIM}  Press Ctrl+C  |  termux-wake-unlock${RESET}"
 echo ""
