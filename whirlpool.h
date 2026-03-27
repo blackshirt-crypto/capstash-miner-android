@@ -21,9 +21,9 @@ extern "C" {
 
 // ── Whirlpool context ──────────────────────────────────────────────────────
 // Kept minimal — miner only needs state and block, no streaming buffer
+#include "sph_whirlpool.h"
 typedef struct {
-    uint64_t state[8];   // 512-bit hash state
-    uint64_t block[8];   // current message block (loaded before compress)
+    sph_whirlpool_context sph;
 } whirlpool_ctx;
 
 // ── Core API ───────────────────────────────────────────────────────────────

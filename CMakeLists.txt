@@ -37,6 +37,8 @@ endif()
 add_executable(capstash-miner
     main.c
     whirlpool.c
+    sph_whirlpool.c
+    md_helper.c
     sha256.c
     rpc.c
     miner.c
