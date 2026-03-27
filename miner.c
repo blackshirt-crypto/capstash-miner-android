@@ -14,6 +14,7 @@
 #include "rpc.h"
 #include "whirlpool.h"
 #include "sha256.h"
+#include "stratum.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,6 +81,7 @@ static miner_callbacks_t   g_callbacks;
 static pthread_t           g_threads[MAX_THREADS];
 static int                 g_thread_count = 0;
 static pthread_mutex_t     g_stats_mutex    = PTHREAD_MUTEX_INITIALIZER;
+static stratum_ctx_t       g_stratum        = {0};
 static pthread_mutex_t     g_template_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static atomic_uint_least64_t g_total_hashes  = 0;
@@ -487,6 +489,40 @@ int miner_start(const miner_config_t *cfg, const miner_callbacks_t *cbs) {
         LOG_ERROR("initial getblocktemplate failed — check node");
         g_running = 0;
         return -1;
+    }
+    if (cfg->pool_mode == 1) {
+        stratum_config_t scfg = {0};
+        snprintf(scfg.host, sizeof(scfg.host), "%s", cfg->host);
+        scfg.port = cfg->port;
+        snprintf(scfg.user, sizeof(scfg.user), "%s", cfg->user);
+        snprintf(scfg.pass, sizeof(scfg.pass), "%s", cfg->pass);
+        if (stratum_connect(&g_stratum, &scfg) != 0) {
+            LOG_ERROR("stratum connect failed — check pool URL");
+            g_running = 0;
+            return -1;
+        }
+        // Wait for first job
+        int waited = 0;
+        while (!g_stratum.job_valid && waited < 10) {
+            stratum_poll(&g_stratum);
+            sleep(1);
+            waited++;
+        }
+        if (!g_stratum.job_valid) {
+            LOG_ERROR("no job received from pool");
+            stratum_disconnect(&g_stratum);
+            g_running = 0;
+            return -1;
+        }
+        // Build initial template from stratum job
+        block_template_t stmpl;
+        if (stratum_build_template(&g_stratum, 0, &stmpl) == 0) {
+            pthread_mutex_lock(&g_template_mutex);
+            memcpy(&g_template, &stmpl, sizeof(stmpl));
+            g_template_valid = 1;
+            pthread_mutex_unlock(&g_template_mutex);
+            LOG_INFO("stratum connected — first job received");
+        }
     }
 
     LOG_INFO("starting %d threads → %s (P-cores %d-%d)",
