@@ -314,6 +314,8 @@ static void *mining_thread(void *arg) {
         }
 
         hex_to_bytes(ltmpl.target_hex, target, 32);
+        // DEBUG — remove after share submission confirmed
+        if (td->thread_id == 0) LOG_INFO("target: %s", ltmpl.target_hex);
 
         // ── Build coinbase + merkle root ──────────────────────────────────
         cb_len = build_coinbase(&ltmpl, td->thread_id, en2,
