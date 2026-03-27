@@ -343,8 +343,15 @@ static void *mining_thread(void *arg) {
             write_le32(header, 76, nonce);
             capstash_hash_midstate(&mid_ctx, header + 64, hash);
 
+            // DEBUG — log occasional hash values to verify hash output
+            if (td->thread_id == 0 && nonce % 0x100000 == 0) {
+            char hash_dbg[65];
+            bytes_to_hex(hash, 32, hash_dbg);
+            LOG_INFO("sample hash: %s", hash_dbg);
+            }
             if (hash[0] <= target[0]) {
-                if (capstash_hash_meets_target(hash, target)) {
+            if (capstash_hash_meets_target(hash, target)) {
+            
                     // ── SHARE / BLOCK FOUND ───────────────────────────────
                     char hash_hex[65];
                     bytes_to_hex(hash, 32, hash_hex);
