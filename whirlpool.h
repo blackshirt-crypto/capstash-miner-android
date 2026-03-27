@@ -58,7 +58,7 @@ void capstash_hash_midstate(const whirlpool_ctx *mid, const uint8_t *tail16,
 void capstash_hash(const uint8_t *header, uint8_t *out);
 
 // Returns 1 if hash <= target (valid PoW), 0 otherwise
-// Compares 32 bytes big-endian (leading-zero target format)
+// Compares 32 bytes MSB first — target must be big-endian encoded
 int capstash_hash_meets_target(const uint8_t *hash, const uint8_t *target);
 
 // ── Hex helpers ────────────────────────────────────────────────────────────

@@ -402,9 +402,9 @@ int stratum_build_template(const stratum_ctx_t *ctx,
             target_bytes[pos + 0] =  mant         & 0xff;
         }
     }
-    // Hex encode as little-endian (byte 0 first) to match hex_to_bytes() in miner.c
+    // Hex encode as big-endian (byte 31 first) to match meets_target() comparison
     for (int i = 0; i < 32; i++)
-        snprintf(tmpl->target_hex + i*2, 3, "%02x", target_bytes[i]);
+        snprintf(tmpl->target_hex + i*2, 3, "%02x", target_bytes[31 - i]);
     tmpl->target_hex[64] = '\0';
 
     tmpl->curtime = (uint32_t)strtoul(j->ntime, NULL, 16);
