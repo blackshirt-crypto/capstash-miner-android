@@ -401,6 +401,8 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     }
 
     tmpl->curtime = (uint32_t)strtoul(j->ntime, NULL, 16);
+    snprintf(tmpl->job_id,    sizeof(tmpl->job_id),    "%s", j->job_id);
+    snprintf(tmpl->ntime_hex, sizeof(tmpl->ntime_hex), "%s", j->ntime);
 
     // Build extranonce2 hex string
     char en2_hex[32] = {0};

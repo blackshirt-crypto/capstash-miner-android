@@ -1,8 +1,6 @@
 /**
- * rpc.h — RPC client header for CapStash NDK miner
- * v2.0
- *
- * Place at: android/app/src/main/cpp/rpc.h
+ * rpc.h — RPC client header for CapStash miner
+ * v3.0.0
  */
 
 #ifndef CAPSTASH_RPC_H
@@ -15,7 +13,7 @@
 extern "C" {
 #endif
 
-// ── RPC connection config ─────────────────────────────────────────────────────
+// ── RPC connection config ─────────────────────────────────────────────────
 typedef struct {
     char host[64];
     int  port;
@@ -23,7 +21,7 @@ typedef struct {
     char pass[64];
 } rpc_config_t;
 
-// ── Block template from getblocktemplate ─────────────────────────────────────
+// ── Block template — shared by solo (RPC) and pool (stratum) modes ────────
 typedef struct {
     uint32_t version;
     uint32_t height;
@@ -33,38 +31,29 @@ typedef struct {
     char     prev_hash_hex[65];    // 32 bytes as 64 hex chars
     char     bits_hex[16];         // compact target hex
     char     target_hex[65];       // full 32-byte target hex
-    // Transaction data for merkle root (simplified — coinbase only for solo)
     char     coinbase_hex[512];    // serialized coinbase tx hex
     char     merkle_root_hex[65];  // computed merkle root
+    // Pool mode fields — populated by stratum_build_template()
+    char     job_id[64];           // stratum job id
+    char     ntime_hex[16];        // current time hex (for share submission)
 } block_template_t;
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────
 
-/**
- * rpc_getblocktemplate — fetch a new block template from the node
- * Returns 0 on success, -1 on error
- */
+// Fetch a new block template from the node (solo mode)
+// Returns 0 on success, -1 on error
 int rpc_getblocktemplate(const rpc_config_t *cfg, block_template_t *tmpl);
 
-/**
- * rpc_submitblock — submit a solved block
- * @block_hex: full serialized block as hex string
- * Returns 0 if accepted, -1 if rejected or error
- */
+// Submit a solved block (solo mode)
+// Returns 0 if accepted, -1 if rejected or error
 int rpc_submitblock(const rpc_config_t *cfg, const char *block_hex);
 
-/**
- * rpc_getbestblockhash — get current chain tip hash
- * Used to detect when a new block arrives (stale template)
- * @out_hash_hex: output buffer, must be at least 65 bytes
- * Returns 0 on success, -1 on error
- */
+// Get current chain tip hash — used to detect new blocks (solo mode)
+// out_hash_hex must be at least 65 bytes
+// Returns 0 on success, -1 on error
 int rpc_getbestblockhash(const rpc_config_t *cfg, char *out_hash_hex);
 
-/**
- * rpc_parse_template — parse getblocktemplate JSON response
- * Called internally but exposed for unit testing
- */
+// Parse getblocktemplate JSON response
 int rpc_parse_template(const char *json, block_template_t *tmpl);
 
 #ifdef __cplusplus
