@@ -341,7 +341,7 @@ static void *mining_thread(void *arg) {
         // ── Inner nonce loop ──────────────────────────────────────────────
         while (g_running) {
             write_le32(header, 76, nonce);
-            capstash_hash_midstate(&mid_ctx, header + 64, hash);
+            capstash_hash(header, hash);  // full hash — bypass midstate for debugging
 
             // DEBUG — log occasional hash values to verify hash output
             if (td->thread_id == 0 && nonce % 0x100000 == 0) {
