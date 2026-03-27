@@ -387,18 +387,25 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
     snprintf(tmpl->bits_hex, sizeof(tmpl->bits_hex), "%s", j->nbits);
 
-    // Expand nbits to full 32-byte target
+    // Expand nbits to full 32-byte target (little-endian bytes to match hash compare)
     uint32_t exp  = (tmpl->bits >> 24) & 0xff;
     uint32_t mant = tmpl->bits & 0x7fffff;
-    memset(tmpl->target_hex, '0', 64);
-    tmpl->target_hex[64] = '\0';
-    if (exp >= 3 && exp <= 32) {
-        char tmp[8];
-        snprintf(tmp, sizeof(tmp), "%06x", mant);
-        int hex_pos = (32 - exp) * 2;
-        if (hex_pos >= 0 && hex_pos + 6 <= 64)
-            memcpy(tmpl->target_hex + hex_pos, tmp, 6);
+    // Build target as 32 raw bytes first, then hex encode little-endian
+    uint8_t target_bytes[32];
+    memset(target_bytes, 0, 32);
+    if (exp >= 1 && exp <= 32) {
+        // Place mantissa bytes at position (exp-3) counting from LSB (index 0)
+        int pos = (int)exp - 3;
+        if (pos >= 0 && pos + 2 < 32) {
+            target_bytes[pos + 2] = (mant >> 16) & 0xff;
+            target_bytes[pos + 1] = (mant >> 8)  & 0xff;
+            target_bytes[pos + 0] =  mant         & 0xff;
+        }
     }
+    // Hex encode as little-endian (byte 0 first) to match hex_to_bytes() in miner.c
+    for (int i = 0; i < 32; i++)
+        snprintf(tmpl->target_hex + i*2, 3, "%02x", target_bytes[i]);
+    tmpl->target_hex[64] = '\0';
 
     tmpl->curtime = (uint32_t)strtoul(j->ntime, NULL, 16);
     snprintf(tmpl->job_id,    sizeof(tmpl->job_id),    "%s", j->job_id);
