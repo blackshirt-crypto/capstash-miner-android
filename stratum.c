@@ -384,6 +384,8 @@ int stratum_build_template(const stratum_ctx_t *ctx,
 
     tmpl->version = (uint32_t)strtoul(j->version, NULL, 16);
     snprintf(tmpl->prev_hash_hex, sizeof(tmpl->prev_hash_hex), "%s", j->prev_hash);
+    // DEBUG
+    LOG_INFO("prevhash raw: %s", j->prev_hash);
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
     snprintf(tmpl->bits_hex, sizeof(tmpl->bits_hex), "%s", j->nbits);
 
