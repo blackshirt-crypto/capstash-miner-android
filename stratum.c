@@ -383,7 +383,21 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     memset(tmpl, 0, sizeof(block_template_t));
 
     tmpl->version = (uint32_t)strtoul(j->version, NULL, 16);
-    snprintf(tmpl->prev_hash_hex, sizeof(tmpl->prev_hash_hex), "%s", j->prev_hash);
+    // Stratum sends prevhash as 8 x 4-byte words each byte-swapped — fix it
+{
+    uint8_t raw[32];
+    hex_to_bytes(j->prev_hash, raw, 32);
+    uint8_t swapped[32];
+    for (int w = 0; w < 8; w++) {
+        swapped[w*4+0] = raw[w*4+3];
+        swapped[w*4+1] = raw[w*4+2];
+        swapped[w*4+2] = raw[w*4+1];
+        swapped[w*4+3] = raw[w*4+0];
+    }
+    bytes_to_hex(swapped, 32, tmpl->prev_hash_hex);
+}
+LOG_INFO("prevhash raw: %s", j->prev_hash);
+LOG_INFO("prevhash fix: %s", tmpl->prev_hash_hex);
     // DEBUG
     LOG_INFO("prevhash raw: %s", j->prev_hash);
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
