@@ -122,11 +122,11 @@ else
     echo ""
     echo -e "${DIM}Known CapStash pools:${RESET}"
     echo ""
-    echo "  1) crypto-eire.com         — stratum+tcp://stratum.crypto-eire.com:3340"
-    echo "  2) capspool.io PPLNS (CPU) — stratum+tcp://pplns.capspool.io:6333 (shared rewards)"
-    echo "  3) capspool.io Solo  (CPU) — stratum+tcp://caps.capspool.io:6433  (full reward)"
-    echo "  4) papaspool.net           — stratum+tcp://papaspool.net:3333"
-    echo "  5) 1miner.net              — stratum+tcp://1miner.net:3333"
+    echo "  1) capspool.io      — stratum+tcp://pplns.capspool.io:6333"
+    echo "  2) papaspool.net    — stratum+tcp://papaspool.net:7777"
+    echo "  3) crypto-eire.com  — stratum+tcp://stratum.crypto-eire.com:3340"
+    echo "  4) 1miner.net       — stratum+tcp://1miner.net:3690"
+    echo "  5) Enter manually"
     echo "  6) Enter manually"
     echo ""
     echo -e "${AMBER}  ⚠ Not all pools have confirmed low difficulty for mobile miners.${RESET}"
@@ -134,31 +134,31 @@ else
     echo ""
     read -p "Select pool (1-6): " POOL_CHOICE
     case $POOL_CHOICE in
-        1) POOL_URL="stratum+tcp://stratum.crypto-eire.com:3340" ;;
-        2) POOL_URL="stratum+tcp://pplns.capspool.io:6333" ;;
-        3) POOL_URL="stratum+tcp://caps.capspool.io:6433" ;;
-        4) POOL_URL="stratum+tcp://papaspool.net:3333" ;;
-        5) POOL_URL="stratum+tcp://1miner.net:3333" ;;
+        1) POOL_URL="stratum+tcp://pplns.capspool.io:6333" ;;
+        2) POOL_URL="stratum+tcp://papaspool.net:7777" ;;
+        3) POOL_URL="stratum+tcp://stratum.crypto-eire.com:3340" ;;
+        4) POOL_URL="stratum+tcp://1miner.net:3690" ;;
+        5) read -p "Pool URL (stratum+tcp://...): " POOL_URL ;;
         *) read -p "Pool URL (stratum+tcp://...): " POOL_URL ;;
     esac
 
     echo ""
     echo -e "${DIM}Backup pool (used by start-backup.sh):${RESET}"
-    echo "  1) crypto-eire.com         — stratum+tcp://stratum.crypto-eire.com:3340"
-    echo "  2) capspool.io PPLNS (CPU) — stratum+tcp://pplns.capspool.io:6333"
-    echo "  3) capspool.io Solo  (CPU) — stratum+tcp://caps.capspool.io:6433"
-    echo "  4) papaspool.net           — stratum+tcp://papaspool.net:3333"
-    echo "  5) 1miner.net              — stratum+tcp://1miner.net:3333"
+    echo "  1) capspool.io      — stratum+tcp://pplns.capspool.io:6333"
+    echo "  2) papaspool.net    — stratum+tcp://papaspool.net:7777"
+    echo "  3) crypto-eire.com  — stratum+tcp://stratum.crypto-eire.com:3340"
+    echo "  4) 1miner.net       — stratum+tcp://1miner.net:3690"
+    echo "  5) Enter manually"
     echo "  6) Enter manually"
     echo "  7) Skip — no backup"
     echo ""
     read -p "Select backup (1-7): " BACKUP_CHOICE
     case $BACKUP_CHOICE in
-        1) BACKUP_URL="stratum+tcp://stratum.crypto-eire.com:3340" ;;
-        2) BACKUP_URL="stratum+tcp://pplns.capspool.io:6333" ;;
-        3) BACKUP_URL="stratum+tcp://caps.capspool.io:6433" ;;
-        4) BACKUP_URL="stratum+tcp://papaspool.net:3333" ;;
-        5) BACKUP_URL="stratum+tcp://1miner.net:3333" ;;
+        1) BACKUP_URL="stratum+tcp://pplns.capspool.io:6333" ;;
+        2) BACKUP_URL="stratum+tcp://papaspool.net:7777" ;;
+        3) BACKUP_URL="stratum+tcp://stratum.crypto-eire.com:3340" ;;
+        4) BACKUP_URL="stratum+tcp://1miner.net:3690" ;;
+        5) read -p "Backup pool URL: " BACKUP_URL ;;
         6) read -p "Backup pool URL: " BACKUP_URL ;;
         *) BACKUP_URL="" ;;
     esac

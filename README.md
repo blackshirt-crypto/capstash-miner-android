@@ -1,69 +1,122 @@
-# CapStash Miner for Android (Termux)
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  PIP-BOY 3000 Mk VI  ·  MINING INTERFACE  ·  VAULT-TEC CORP  ☢  ║
+║                                                                      ║
+║        C A P S T A S H   A N D R O I D   M I N E R                 ║
+║                    v3.0.0  ·  WHIRLPOOL-512                         ║
+║                                                                      ║
+║  [ STATS ]   [ POOLS ]   [ INSTALL ]   [ DATA ]   [ RADIO ]         ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-Whirlpool-512 CPU miner for CapStash — built specifically for Android via Termux. Unlike generic multi-algorithm miners, this miner is purpose-built for CapStash's Whirlpool-512 algorithm, delivering significantly higher hashrates through targeted CPU optimizations.
+> *"The Pip-Boy never lies, Vault Dweller. Your hashrate is your survival."*
+> — Vault-Tec Mining Division, 2161
 
-For information about CapStash, tokenomics, and the coin itself visit the official repository:
+**VAULT-TEC CERTIFIED** CPU miner for the CapStash network. Purpose-built for Android ARM64 via Termux. Unlike bloated multi-algorithm miners carrying dead code for 80+ algorithms, this unit runs **Whirlpool-512 only** — lean, fast, and optimized for the wasteland's most abundant hardware: the humble mobile phone.
+
+For intel on CapStash, tokenomics, and the coin itself, tune your Pip-Boy to:
 **[https://github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core)**
 
 ---
 
-## 🚀 What's New in v3.0
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  STATS  ·  v3.0.0 UPGRADE LOG                                    ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-- **T0-only Whirlpool** — replaced 8-table (16KB) lookup with single-table + ROTL64 rotations (2KB). Fits entirely in ARM L1 cache for a dramatic speedup
-- **Midstate precomputation** — the first 64 bytes of the block header are hashed once per template, not once per nonce. Saves ~80% of hash work in the inner loop
-- **P-core affinity** — mining threads are pinned directly to performance cores via `sched_setaffinity`, preventing the OS from migrating work to slow efficiency cores
-- **Stratum pool support** — full `stratum+tcp` client with subscribe, authorize, notify, and share submission
-- **Auto P-core detection** — setup script reads `/proc/cpuinfo` CPU part numbers to recommend the correct thread count for your specific chip
+| SYSTEM | STATUS | NOTES |
+|--------|--------|-------|
+| Whirlpool T0-only | ✅ ONLINE | 2KB table vs 16KB — fits ARM L1 cache entirely |
+| Midstate precompute | ✅ ONLINE | Block header hashed once per template, not per nonce |
+| P-core affinity | ✅ ONLINE | Threads pinned to performance cores via sched_setaffinity |
+| Stratum pool client | ✅ ONLINE | Full subscribe → authorize → notify → submit pipeline |
+| Auto P-core detect | ✅ ONLINE | Reads /proc/cpuinfo CPU part numbers at setup |
 
----
-
-## 📱 Requirements
-
-- Android device (ARM64 — any modern Android phone)
-- [Termux](https://f-droid.org/en/packages/com.termux/) from F-Droid (not Play Store)
-- Stable internet connection
-- At least 500MB free storage space
-- A CapStash wallet address (`cap1...`, `C...`, or `8...`)
-- A running CapStash node (solo) or pool URL (pool)
+> *Previous field units (v1.0) reported 3.36 MH/s. v3.0.0 units report 5.87 MH/s on identical hardware. Vault-Tec approves.*
 
 ---
 
-## ⚡ Quick Start
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  INSTALL  ·  QUICK DEPLOYMENT PROTOCOL                           ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-### 1. Install Termux
-Download from [F-Droid](https://f-droid.org/en/packages/com.termux/) — do **not** use the Play Store version as it is outdated and will fail to build.
+### STEP 1 — ACQUIRE TERMUX
 
-### 2. Download and Run Setup Script
-Open Termux and run:
+Download from **[F-Droid](https://f-droid.org/en/packages/com.termux/)** only.
+
+> ⚠️ **VAULT-TEC WARNING:** The Play Store version is corrupted pre-war software. It will fail to build. Do not use it.
+
+### STEP 2 — DEPLOY MINING UNIT
+
+Open Termux and transmit the following:
 
 ```bash
 curl -O https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/setup_capstash_miner.sh && chmod +x setup_capstash_miner.sh && ./setup_capstash_miner.sh
 ```
 
-### 3. Configure During Setup
-The interactive setup will prompt you for:
+### STEP 3 — CONFIGURE YOUR UNIT
 
-- **Mining mode**: Solo (direct to your CapStash node) or Pool (stratum)
-- **Solo**: Node IP address, RPC port, RPC username, RPC password
-- **Pool**: Select from known pools or enter manually, backup pool (optional), worker name
-- **Reward address**: Your CapStash wallet address (`cap1...`, `C...`, or `8...`)
-- **Threads**: Auto-detected from your CPU's performance core count
+The interactive setup will interrogate you for:
 
-### 4. Start Mining
+- **Mining mode** — Solo (direct RPC to your node) or Pool (stratum)
+- **Pool selection** — Choose from known wasteland pools or enter manually
+- **Reward address** — Your CapStash wallet (`cap1...`, `C...`, or `8...`)
+- **Thread count** — Auto-detected from your CPU's performance core layout
+
+### STEP 4 — BEGIN OPERATIONS
 
 ```bash
-cd ~/capstash-miner
-./start.sh
+cd ~/capstash-miner && ./start.sh
 ```
+
+*Vault-Tec estimates deployment time: 2-4 minutes including compilation.*
 
 ---
 
-## 🎯 Solo vs Pool Mining
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  RADIO  ·  KNOWN WASTELAND MINING POOLS                          ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-### Solo Mining
-Connect directly to your own CapStash node via RPC. You keep 100% of the block reward (1 CAP per block, 60 second block times).
+*Tune your Pip-Boy to one of the following verified signals. Pool operators
+are fellow survivors — check their dashboards for current status and
+difficulty settings before committing your hashrate.*
 
-Your node's `CapStash.conf` must include:
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  STATION          SIGNAL                              TYPE           │
+├─────────────────────────────────────────────────────────────────────┤
+│  capspool.io      stratum+tcp://pplns.capspool.io:6333   PPLNS      │
+│  papaspool.net    stratum+tcp://papaspool.net:7777        PPLNS      │
+│  crypto-eire.com  stratum+tcp://stratum.crypto-eire.com:3340  PPLNS │
+│  1miner.net       stratum+tcp://1miner.net:3690           PPLNS      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+> ⚠️ **SIGNAL ADVISORY:** Pool addresses and ports may shift as the wasteland evolves.
+> Always verify connection details at the pool's dashboard before deploying.
+> Not all pools have confirmed low-difficulty settings for CPU mobile miners —
+> if shares aren't registering, switch stations and try again.
+
+**Worker format:** `cap1qYOURADDRESS.your-worker-name`
+**Password:** `x`
+
+---
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  SOLO MINING PROTOCOL                                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+Connect directly to your own CapStash node. You keep **100% of the block reward** (1 CAP per block, ~60 second block times). Requires a synced node on your network or Tailscale VPN.
+
+Your node's `CapStash.conf` must contain:
+
 ```
 server=1
 rpcuser=youruser
@@ -76,167 +129,153 @@ rpcallowip=100.64.0.0/10   ← Tailscale subnet
 rpcport=8332
 ```
 
-Example setup prompt responses:
-```
-Node IP:  192.168.86.x  (local) or 100.x.x.x (Tailscale)
-Port:     8332
-User:     your_rpc_user
-Pass:     your_rpc_password
-```
-
-**Pro tip:** Use your local IP (`192.168.x.x`) when mining at home for lower latency. Switch to your Tailscale IP when away using `./reconfigure.sh`.
-
-### Pool Mining
-Connect to a CapStash mining pool via stratum protocol. Rewards are split proportionally by hashrate — no node required.
-
-```
-Pool URL:   stratum+tcp://pool.address:port
-Worker:     cap1qYOURADDRESS.phone-1
-Password:   x
-```
-
-#### Known CapStash Pools
-
-| Pool | Stratum URL |
-|------|-------------|
-| [crypto-eire.com](https://crypto-eire.com/dash.php?coin=cap) | `stratum+tcp://crypto-eire.com:3333` |
-| [capspool.io](https://capspool.io/) | `stratum+tcp://capspool.io:3333` |
-| [papaspool.net](https://papaspool.net/) | `stratum+tcp://papaspool.net:3333` |
-| [1miner.net](https://1miner.net/main.html) | `stratum+tcp://1miner.net:3333` |
-
-> ⚠️ **Note:** Not all pools have confirmed low difficulty settings for mobile miners. Verify your hashrate after connecting — if shares aren't being accepted try another pool.
+**Field tip:** Use your local IP (`192.168.x.x`) at home for lower latency. Switch to Tailscale (`100.x.x.x`) when operating remotely via `./reconfigure.sh`.
 
 ---
 
-## 🔄 Managing Your Miner
-
-### Start Mining
-```bash
-cd ~/capstash-miner && ./start.sh
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  STATS  ·  PERFORMANCE READOUT  ·  MOTO EDGE FIELD TEST         ║
+╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-### Start on Backup Pool (pool mode only)
-```bash
-cd ~/capstash-miner && ./start-backup.sh
+*Benchmark conducted on Motorola Edge 5G UW · Snapdragon 778G · 4x A78 + 4x A55*
+*Pool: pplns.capspool.io:6333 · Algorithm: Whirlpool-512*
+
+```
+THREADS  CORES        STABLE      MAX         FIELD NOTES
+───────  ───────────  ──────────  ──────────  ─────────────────────────────
+1        core 4       1.47 MH/s   1.57 MH/s   Single A78 — rock steady
+2        cores 4-5    2.94 MH/s   3.15 MH/s   Linear scaling confirmed
+3        cores 4-6    4.40 MH/s   4.72 MH/s   Solid, recommended minimum
+4 ★      cores 4-7    5.87 MH/s   6.29 MH/s   ★ SAFE SWEET SPOT — all P-cores
+5        cores 4-7+   7.34 MH/s   7.86 MH/s   Shares core 4, still efficient
+6 ⚡     cores 4-7+   8.81 MH/s   9.44 MH/s   ⚡ MAX OUTPUT — batteryless rigs
+7        cores 4-7+   ERRATIC     9.54 MH/s   Thermal throttle suspected
+8        cores 4-7+   7.13 MH/s   7.55 MH/s   Contention — worse than 6
 ```
 
-### View Current Configuration
-```bash
-cd ~/capstash-miner && ./info.sh
-```
+> **★ VAULT-TEC RECOMMENDATION:**
+> 4 threads for daily drivers and hot environments.
+> 6 threads for batteryless farm units — rock solid 8.81 MH/s sustained.
+> Never run E-cores (A55/A53) — Whirlpool's table evicts from their tiny L1 cache.
 
-### Reconfigure Settings
-```bash
-cd ~/capstash-miner && ./reconfigure.sh
-```
-
-Reconfigure menu options:
-1. Mining mode (solo/pool)
-2. Node IP / Pool URL
-3. RPC credentials / Pool password
-4. Reward address
-5. Thread count
-6. Worker name
-7. Full reconfigure
-8. Exit
-
-### Keep Mining After Closing Termux
-```bash
-termux-wake-lock
-cd ~/capstash-miner && ./start.sh
-# Close Termux — mining continues in background
-```
-
-### Stop Mining
-```bash
-# Press Ctrl+C in Termux window
-termux-wake-unlock
-```
-
----
-
-## 📊 Thread Count Guide
-
-This miner is optimized for ARM64 big.LITTLE architecture. The key rule: **never exceed your performance core count**.
-
-Modern Android CPUs have two types of cores:
-- **Performance cores** (A78, A76, X1, X2) — fast, ideal for mining
-- **Efficiency cores** (A55, A53) — slow, adding these hurts overall hashrate
-
-The setup script auto-detects your P-core count from `/proc/cpuinfo` and recommends the right thread count. To check manually:
+### IDENTIFY YOUR CPU CORES
 
 ```bash
 cat /proc/cpuinfo | grep "CPU part" | sort | uniq -c
 ```
 
-Common CPU part numbers:
-- `0xd41` = Cortex-A78 (performance) ← use these
-- `0xd44` = Cortex-X1 (performance) ← use these
-- `0xd46` = Cortex-A76 (performance) ← use these
-- `0xd05` = Cortex-A55 (efficiency) ← avoid
-- `0xd03` = Cortex-A53 (efficiency) ← avoid
-
-### Real Performance Example — v3.0 (4x A78 + 4x A55 device)
-
-| Threads | Hashrate | Notes |
-|---------|----------|-------|
-| 1 | ~840 KH/s | Single A78 core |
-| 2 | ~1.68 MH/s | Two A78 cores |
-| 3 | ~2.52 MH/s | Three A78 cores |
-| **4** | **~5.77 MH/s** | ← Sweet spot, all A78 cores |
-| 5 | ~1.31 MH/s | Hits A55 cores — dramatic drop |
-| 6-8 | worse | Avoid |
-
-Performance collapses beyond the A78 core count because Whirlpool's lookup table (2KB in v3.0) gets evicted from L1 cache when E-cores join.
-
-> v1.0 topped out at ~3.36 MH/s at 4 threads. v3.0 reaches ~5.77 MH/s on the same hardware through T0-only Whirlpool and midstate precomputation.
-
----
-
-## 🛠️ Switching Between Home and Remote
-
-At home (lower latency, better hashrate):
-```bash
-cd ~/capstash-miner
-./reconfigure.sh  # Option 2 — set to local IP 192.168.x.x
 ```
-
-Away from home (via Tailscale):
-```bash
-cd ~/capstash-miner
-./reconfigure.sh  # Option 2 — set to Tailscale IP 100.x.x.x
+PART NUMBER   CORE TYPE        VERDICT
+──────────    ──────────────   ───────
+0xd41         Cortex-A78       ✅ MINE WITH THESE
+0xd44         Cortex-X1        ✅ MINE WITH THESE
+0xd46         Cortex-A76       ✅ MINE WITH THESE
+0xd47         Cortex-A710      ✅ MINE WITH THESE
+0xd05         Cortex-A55       ☠ AVOID — cache too small
+0xd03         Cortex-A53       ☠ AVOID — cache too small
 ```
 
 ---
 
-## 🔗 Network Notes — Lottery Blocks & Hardforks
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  FIELD OPERATIONS MANUAL                                ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-CapStash has undergone two consensus hardforks relevant to miners:
+**Start primary pool:**
+```bash
+cd ~/capstash-miner && ./start.sh
+```
 
-**Height 55,000 — Lottery Consensus v1**
-Introduced cryptographically randomized lottery blocks. Previously, lottery blocks were triggered by slow block times (>2 min). After this fork, approximately 1 in 20 blocks is selected as a lottery block via a hash-based random draw from prior chain state — making lottery blocks unpredictable and manipulation-resistant.
+**Start backup pool:**
+```bash
+cd ~/capstash-miner && ./start-backup.sh
+```
 
-**Height 65,000 — Lottery Consensus v2 (Permanent)**
-Finalized the lottery system. Consecutive lottery blocks are no longer allowed, and the selection uses an updated domain separator for improved security. This is the permanent quarantine of the old lottery sample set.
+**View current config:**
+```bash
+cd ~/capstash-miner && ./info.sh
+```
 
-**What this means for miners:** The PoW algorithm (Whirlpool-512 XOR/256) and block reward (1 CAP) are unchanged by either fork. Lottery blocks are a consensus feature — you mine them the same way as any other block. No changes to this miner are required.
+**Reconfigure unit:**
+```bash
+cd ~/capstash-miner && ./reconfigure.sh
+```
+
+*Reconfigure options: mode · pool URL · credentials · address · threads · worker name · full reset*
+
+**Keep mining after closing Termux:**
+```bash
+termux-wake-lock
+cd ~/capstash-miner && ./start.sh
+# Close Termux — unit continues operating
+```
+
+**Cease operations:**
+```bash
+# Ctrl+C in Termux
+termux-wake-unlock
+```
 
 ---
 
-## 🔧 Manual Build
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  NETWORK INTELLIGENCE — LOTTERY BLOCKS & HARDFORKS     ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-If the setup script fails, build manually:
+**HEIGHT 55,000 — LOTTERY CONSENSUS v1**
+Lottery blocks are no longer triggered by slow block times (>2 min). Selection is now cryptographically random — approximately 1 in 20 blocks is designated a lottery block via hash-based draw from prior chain state. Unpredictable. Manipulation-resistant.
+
+**HEIGHT 65,000 — LOTTERY CONSENSUS v2 (PERMANENT)**
+Consecutive lottery blocks prohibited. Updated domain separator. The old lottery sample set is permanently quarantined.
+
+**WHAT THIS MEANS FOR YOUR UNIT:** Nothing changes. Same Whirlpool-512 PoW. Same 1 CAP reward. Lottery blocks are mined identically to regular blocks. No firmware update required.
+
+---
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  PHONE FARM DEPLOYMENT                                  ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+Each unit mines independently. Point all phones at the same wallet address — rewards accumulate regardless of which unit finds the block. For combined hashrate, connect all units to the same stratum pool with unique worker names:
+
+```
+cap1qYOURADDRESS.phone-01
+cap1qYOURADDRESS.phone-02
+cap1qYOURADDRESS.phone-03
+...
+cap1qYOURADDRESS.phone-56
+```
+
+Monitor your fleet on the pool dashboard using your wallet address.
+
+> *The Cell Hasher deployment protocol supports mass installation across your fleet.
+> One command. All units operational.*
+
+---
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  MANUAL BUILD PROTOCOL                                  ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+*If automated setup fails, build manually:*
 
 ```bash
-# Install dependencies
 pkg update && pkg upgrade
 pkg install clang cmake make git curl
 
-# Clone repo
 git clone https://github.com/scratcher14/capstash-miner-android ~/capstash-miner
 cd ~/capstash-miner
 
-# Build optimized for your device
 mkdir build && cd build
 cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
@@ -244,150 +283,155 @@ cmake .. \
   -DANDROID_BUILD=ON \
   -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops"
 make -j$(nproc)
+cp capstash-miner ..
 cd ..
 ```
 
----
-
-## 🔄 Updating
-
+**Field update protocol:**
 ```bash
-cd ~/capstash-miner
-git pull
-cd build
-cmake .. \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER=clang \
-  -DANDROID_BUILD=ON \
-  -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops"
-make -j$(nproc)
-cd ..
+cd ~/capstash-miner && git pull
+cd build && make -j$(nproc) && cp capstash-miner .. && cd ..
 ```
 
 ---
 
-## ⚠️ Important Notes
-
-### Battery & Heat Management
-- Keep your phone plugged in while mining
-- Monitor temperature — stop if device exceeds 45°C
-- Remove phone case for better airflow
-- Start with fewer threads and increase gradually
-- Mining at 4 threads on A78 cores runs warm but stable on most devices
-
-### Performance Tips
-- Use local IP when on the same network as your node — reduces latency dramatically
-- Close all other apps while mining
-- Enable Performance mode in phone settings if available
-- Disable battery optimization for Termux
-
-### Why This Miner is Faster Than Generic Miners
-cpuminer-opt and similar tools carry code for 80+ algorithms. Every build includes dead code, generic memory layouts, and compromises that serve all hardware. This miner is Whirlpool-512 only:
-- T0-only lookup table (2KB) fits entirely in ARM L1 cache — no cache eviction during the hash loop
-- Midstate precomputation eliminates ~80% of hash work per nonce
-- P-core thread pinning prevents OS scheduling onto slow efficiency cores
-- Compiler flags tuned specifically for ARM64 out-of-order execution
-- No algorithm-switching overhead in the hot loop
-
----
-
-## 📁 File Structure
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  FILE MANIFEST                                          ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
 ```
 ~/capstash-miner/
-├── capstash-miner        ← compiled binary
-├── start.sh              ← start mining (primary pool or solo)
-├── start-backup.sh       ← start on backup pool (pool mode only)
-├── reconfigure.sh        ← change settings menu
-├── info.sh               ← view current config
-├── mining-config.txt     ← saved configuration
-└── build/                ← cmake build directory
+├── capstash-miner        ← compiled field unit binary
+├── start.sh              ← deploy primary pool
+├── start-backup.sh       ← deploy backup pool
+├── reconfigure.sh        ← field reconfiguration menu
+├── info.sh               ← unit status readout
+├── mining-config.txt     ← mission parameters
+└── build/                ← compilation bunker
 ```
 
 ---
 
-## 🔧 Troubleshooting
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  TROUBLESHOOTING — FIELD DIAGNOSTICS                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-**Low hashrate after v3.0 upgrade**
-Make sure you rebuilt the binary after pulling — an old binary won't have the new optimizations:
+**Unit reports old hashrate after update**
+Binary needs recompilation after source update:
 ```bash
 cd ~/capstash-miner && git pull
-cd build && make -j$(nproc) && cd ..
+cd build && rm -rf * && cmake .. -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang -DANDROID_BUILD=ON \
+  -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops" \
+  > /dev/null && make -j$(nproc) && cp capstash-miner .. && cd ..
 ```
 
 **"Failed to start — check node connection"**
-- Verify node IP and port are correct
-- Test from Termux: `curl -s --user "user:pass" --data '{"method":"getblockcount","params":[],"id":1}' -H 'Content-Type: application/json' http://NODE_IP:8332/`
-- Solo: confirm `rpcbind` in `CapStash.conf` includes your network IP
-- Solo: confirm `rpcallowip` covers your phone's subnet
+- Verify node IP and RPC port
+- Test signal from Termux:
+```bash
+curl -s --user "user:pass" --data '{"method":"getblockcount","params":[],"id":1}' \
+  -H 'Content-Type: application/json' http://NODE_IP:8332/
+```
+- Confirm `rpcbind` and `rpcallowip` cover your phone's subnet
 
-**Pool shares not being accepted**
-- Some pools have high minimum difficulty — try a different pool from the list above
-- Verify your worker format is `cap1qYOURADDRESS.workername`
-- Check pool dashboard to confirm your worker is registering
+**Pool shares not registering**
+- Some pools run high minimum difficulty — mobile hashrate may not meet threshold
+- Switch to another pool station and retry
+- Verify worker format: `cap1qYOURADDRESS.workername`
+- Confirm your address on the pool dashboard
 
 **"Address decode failed"**
-- Verify address starts with `cap1`, `C`, or `8`
-- `cap1` addresses must be lowercase
+- Address must start with `cap1`, `C`, or `8`
+- `cap1` addresses must be fully lowercase
 
-**Low hashrate / drops after a few minutes**
-- Thermal throttling — reduce thread count by 1
-- Keep phone plugged in and cool
-- Never exceed your performance core count
+**Hashrate drops after a few minutes**
+- Thermal throttle detected — reduce thread count by 1
+- Keep unit plugged in and remove case for airflow
+- Never exceed P-core count
 
-**Miner stops after closing Termux**
+**Unit goes dark after closing Termux**
 - Run `termux-wake-lock` before `./start.sh`
 
 ---
 
-## 💡 Tips & Tricks
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  TEMPERATURE MONITORING                                 ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-### Phone Farms
-Each phone mines independently — in solo mode they do not combine hashrate, but all rewards land in whichever wallet address you configured regardless of which device finds the block. Point all phones at the same address and everything accumulates in one wallet.
-
-For combined hashrate across devices, connect all phones to the same stratum pool using the same wallet address with different worker names (`cap1q...address.phone-1`, `cap1q...address.phone-2`, etc).
-
-### Best Mining Strategy
-- Test thread counts on your specific device — every chip is different
-- Use local IP at home, Tailscale when away
-- Monitor first session for thermal behavior before leaving unattended
-- Start at P-core count and adjust from there
-
-### Temperature Monitoring
 ```bash
-# Install termux-api for battery/temp info
 pkg install termux-api
 termux-battery-status
 ```
 
+> ⚠️ **VAULT-TEC THERMAL ADVISORY:** Cease operations if unit exceeds 45°C.
+> Remove protective casing for improved heat dissipation.
+> Batteryless units in the Cell Hasher have no battery thermal risk —
+> push the cores harder, Vault Dweller.
+
 ---
 
-## 📖 About CapStash
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  DATA  ·  INTELLIGENCE BRIEF — ABOUT CAPSTASH                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-CapStash is a CPU-minable cryptocurrency using the Whirlpool-512 XOR/256 proof-of-work algorithm.
+```
+DESIGNATION:    CapStash (CAPS)
+ALGORITHM:      Whirlpool-512 XOR/256
+BLOCK TIME:     ~60 seconds
+BLOCK REWARD:   1 CAP
+RESISTANCE:     GPU-resistant · ASIC-resistant · CPU-optimized
+STATUS:         ACTIVE — chain height 65,000+
+```
 
-- **Block time:** 60 seconds
-- **Block reward:** 1 CAP per block
-- **Algorithm:** Whirlpool-512 XOR/256
-- **CPU friendly:** designed for CPU mining, resistant to GPU and ASIC
-
-For full details on tokenomics, the whitepaper, node setup, and wallet downloads visit the official repository:
+Full intelligence dossier, whitepaper, node firmware, and wallet downloads:
 **[https://github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core)**
 
 ---
 
-## 🆘 Support & Resources
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  RADIO  ·  SUPPORT & RESOURCES                                   ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-- **CapStash Core:** [https://github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core)
-- **This Repo:** [https://github.com/scratcher14/capstash-miner-android](https://github.com/scratcher14/capstash-miner-android)
-- **Cell Hasher:** [https://cellhasher.com/](https://cellhasher.com/) — Mobile mining community, resources, and Discord
+| STATION | FREQUENCY |
+|---------|-----------|
+| CapStash Core | [github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core) |
+| This Repo | [github.com/scratcher14/capstash-miner-android](https://github.com/scratcher14/capstash-miner-android) |
+| Cell Hasher | [cellhasher.com](https://cellhasher.com/) — Mobile mining community & Discord |
 
 ---
 
-## ⚖️ Disclaimer
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  VAULT-TEC LEGAL DISCLAIMER                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
 
-Mining cryptocurrency generates significant heat and consumes battery. Monitor your device temperature and battery health. This software is provided as-is. Mine responsibly and never mine on devices with poor cooling or in hot environments.
+*Mining operations generate significant thermal output and consume power reserves.
+Monitor unit temperature. Vault-Tec Corporation accepts no liability for melted
+circuits, battery bloat, or losses sustained in the wasteland. This firmware is
+provided as-is. Mine responsibly. The wasteland is unforgiving.*
+
+*Vault-Tec reminds you: a warm phone is a working phone — until it isn't.*
 
 ---
 
-*WALLET OF THE WASTELAND · STAY VIGILANT · STAY SAFE · STACK CAPS*
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║   ☢  WALLET OF THE WASTELAND  ·  STAY VIGILANT  ·  STACK CAPS  ☢   ║
+║                                                                      ║
+║              War never changes. But hashrates do.                    ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
