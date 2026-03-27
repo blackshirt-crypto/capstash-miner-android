@@ -1,6 +1,6 @@
 /**
  * stratum.c — Stratum client for CapStash Android miner
- * v1.0 — stratum+tcp, subscribe/authorize/mining.notify/submit
+ * v1.1 — fixed process_line order (subscribe before notify)
  *
  * Protocol flow:
  *   1. TCP connect to pool
@@ -12,7 +12,7 @@
 
 #define _GNU_SOURCE
 #include "stratum.h"
-#include "whirlpool.h"   // hex helpers
+#include "whirlpool.h"
 #include "sha256.h"
 
 #include <stdio.h>
@@ -89,24 +89,23 @@ static int stratum_recv_line(stratum_ctx_t *ctx, char *out, size_t out_sz) {
     return (int)pos;
 }
 
-// ── Minimal JSON string extractor ─────────────────────────────────────────
-
 // ── Parse mining.subscribe response ──────────────────────────────────────
-// Response: {"id":1,"result":[[["mining.notify","..."]],
-//            "extranonce1_hex", extranonce2_size],"error":null}
+// Response: {"result":[[["mining.notify","..."]]],"extranonce1","en2_size"}
+// The result array contains "mining.notify" as a string — so we MUST
+// parse subscribe by id BEFORE checking for notify by method name.
 static int parse_subscribe(stratum_ctx_t *ctx, const char *line) {
-    // extranonce1 is the second string in the result array
-    // Find pattern: ],"<hex>",<int>
+    // Find extranonce1 — it follows the last ]] in the result array
+    // Pattern: ]],"<extranonce1>",<size>  or  ]],{"  variations
     const char *p = strstr(line, "]],\"");
     if (!p) {
-        // try alternate format: ],"
         p = strstr(line, "],\"");
         if (!p) { LOG_ERROR("subscribe parse failed: %s", line); return -1; }
         p += 3;
     } else {
         p += 4;
     }
-    // p now points at extranonce1 value
+
+    // p now points at start of extranonce1 value
     const char *e = strchr(p, '"');
     if (!e) return -1;
     size_t len = (size_t)(e - p);
@@ -114,12 +113,12 @@ static int parse_subscribe(stratum_ctx_t *ctx, const char *line) {
     memcpy(ctx->extranonce1, p, len);
     ctx->extranonce1[len] = '\0';
 
-    // extranonce2_size follows the comma after closing quote
+    // extranonce2_size follows: ,"<en1>",<size>
     p = e + 2; // skip closing quote and comma
     ctx->extranonce2_size = atoi(p);
     if (ctx->extranonce2_size <= 0) ctx->extranonce2_size = 4;
 
-    LOG_INFO("extranonce1=%s en2_size=%d",
+    LOG_INFO("subscribed — extranonce1=%s en2_size=%d",
              ctx->extranonce1, ctx->extranonce2_size);
     return 0;
 }
@@ -130,21 +129,20 @@ static int parse_subscribe(stratum_ctx_t *ctx, const char *line) {
 static int parse_notify(stratum_ctx_t *ctx, const char *line) {
     stratum_job_t *j = &ctx->job;
 
-    // Extract params array content between first [ and last ]
     const char *params = strstr(line, "\"params\":[");
     if (!params) return -1;
-    params += 10; // skip "params":[
+    params += 10;
 
-    // Parse positional string fields by counting commas + quotes
-    // Field 0: job_id
     const char *p = params;
+
+    // Field 0: job_id
     if (*p == '"') p++;
     const char *e = strchr(p, '"');
     if (!e) return -1;
     size_t len = (size_t)(e - p);
     if (len >= sizeof(j->job_id)) len = sizeof(j->job_id) - 1;
     memcpy(j->job_id, p, len); j->job_id[len] = '\0';
-    p = e + 2; // skip closing quote + comma
+    p = e + 2;
 
     // Field 1: prevhash
     if (*p == '"') p++;
@@ -167,7 +165,7 @@ static int parse_notify(stratum_ctx_t *ctx, const char *line) {
     memcpy(j->coinb2, p, len); j->coinb2[len] = '\0';
     p = e + 2;
 
-    // Field 4: merkle_branch array ["hash1","hash2",...]
+    // Field 4: merkle_branch array
     j->merkle_count = 0;
     if (*p == '[') {
         p++;
@@ -209,24 +207,55 @@ static int parse_notify(stratum_ctx_t *ctx, const char *line) {
     memcpy(j->ntime, p, len); j->ntime[len] = '\0';
     p = e + 2;
 
-    // Field 8: clean_jobs (true/false)
+    // Field 8: clean_jobs
     j->clean_jobs = (strncmp(p, "true", 4) == 0) ? 1 : 0;
 
-    // Copy extranonce1 into job for template building
+    // Copy extranonce info into job
     snprintf(j->extranonce1, sizeof(j->extranonce1), "%s", ctx->extranonce1);
     j->extranonce2_size = ctx->extranonce2_size;
 
-    LOG_INFO("new job id=%s height(from nbits)=%s clean=%d merkle=%d",
+    LOG_INFO("new job id=%s nbits=%s clean=%d merkle=%d",
              j->job_id, j->nbits, j->clean_jobs, j->merkle_count);
     return 0;
 }
 
 // ── Process one line from pool ────────────────────────────────────────────
+// IMPORTANT: Check id-based responses FIRST.
+// The subscribe response result array contains the string "mining.notify"
+// so checking for notify by name first would misroute the subscribe response.
 static int process_line(stratum_ctx_t *ctx, const char *line) {
     if (!line || !line[0]) return 0;
 
-    // mining.notify
-    if (strstr(line, "\"mining.notify\"") || strstr(line, "mining.notify")) {
+    // Subscribe response — id=1, has "result" array
+    if (strstr(line, "\"id\":1") && strstr(line, "\"result\"")) {
+        if (parse_subscribe(ctx, line) == 0)
+            ctx->subscribed = 1;
+        return 0;
+    }
+
+    // Authorize response — id=2
+    if (strstr(line, "\"id\":2") && strstr(line, "\"result\"")) {
+        if (strstr(line, "\"result\":true") || strstr(line, "\"result\": true")) {
+            ctx->authorized = 1;
+            LOG_INFO("authorized ✓");
+        } else {
+            LOG_ERROR("authorization failed — check wallet address");
+        }
+        return 0;
+    }
+
+    // Share submit response — has result but no method
+    if ((strstr(line, "\"result\":true") || strstr(line, "\"result\":false")) &&
+        !strstr(line, "\"method\"")) {
+        if (strstr(line, "\"result\":true"))
+            LOG_INFO("share accepted ✓");
+        else
+            LOG_WARN("share rejected");
+        return 0;
+    }
+
+    // mining.notify — actual work notification (id:null)
+    if (strstr(line, "\"mining.notify\"") && strstr(line, "\"id\":null")) {
         if (strstr(line, "\"params\"")) {
             if (parse_notify(ctx, line) == 0) {
                 ctx->job_valid = 1;
@@ -238,36 +267,7 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
 
     // mining.set_difficulty
     if (strstr(line, "mining.set_difficulty")) {
-        // Just log it — difficulty is encoded in nbits from getblocktemplate
         LOG_INFO("set_difficulty received");
-        return 0;
-    }
-
-    // subscribe response (id=1)
-    if (strstr(line, "\"id\":1") && strstr(line, "\"result\"")) {
-        if (parse_subscribe(ctx, line) == 0)
-            ctx->subscribed = 1;
-        return 0;
-    }
-
-    // authorize response (id=2)
-    if (strstr(line, "\"id\":2") && strstr(line, "\"result\"")) {
-        if (strstr(line, "\"result\":true") || strstr(line, "\"result\": true")) {
-            ctx->authorized = 1;
-            LOG_INFO("authorized ✓");
-        } else {
-            LOG_ERROR("authorization failed — check wallet address");
-        }
-        return 0;
-    }
-
-    // submit response
-    if (strstr(line, "\"result\":true")) {
-        LOG_INFO("share accepted ✓");
-        return 0;
-    }
-    if (strstr(line, "\"result\":false") || strstr(line, "\"result\": false")) {
-        LOG_WARN("share rejected");
         return 0;
     }
 
@@ -280,11 +280,13 @@ int stratum_connect(stratum_ctx_t *ctx, const stratum_config_t *cfg) {
     memset(ctx, 0, sizeof(stratum_ctx_t));
     memcpy(&ctx->cfg, cfg, sizeof(stratum_config_t));
     ctx->msg_id = 1;
+    ctx->sock   = -1;
 
     ctx->sock = tcp_connect(cfg->host, cfg->port);
     if (ctx->sock < 0) return -1;
 
     char msg[512];
+    char line[RECV_BUF_SIZE];
 
     // 1. Subscribe
     snprintf(msg, sizeof(msg),
@@ -293,13 +295,15 @@ int stratum_connect(stratum_ctx_t *ctx, const stratum_config_t *cfg) {
         ctx->msg_id++);
     if (stratum_send(ctx, msg) < 0) goto fail;
 
-    // Read subscribe response
-    char line[RECV_BUF_SIZE];
-    if (stratum_recv_line(ctx, line, sizeof(line)) < 0) {
-        LOG_ERROR("no subscribe response");
-        goto fail;
+    // Read subscribe response — may get set_difficulty before it
+    for (int i = 0; i < 5; i++) {
+        if (stratum_recv_line(ctx, line, sizeof(line)) < 0) {
+            LOG_ERROR("no subscribe response");
+            goto fail;
+        }
+        process_line(ctx, line);
+        if (ctx->subscribed) break;
     }
-    process_line(ctx, line);
     if (!ctx->subscribed) {
         LOG_ERROR("subscribe failed");
         goto fail;
@@ -312,19 +316,18 @@ int stratum_connect(stratum_ctx_t *ctx, const stratum_config_t *cfg) {
         ctx->msg_id++, cfg->user, cfg->pass);
     if (stratum_send(ctx, msg) < 0) goto fail;
 
-    // Read authorize response (may need a few lines for notify too)
-    for (int i = 0; i < 5; i++) {
+    // Read authorize response — may get notify/difficulty before it
+    for (int i = 0; i < 10; i++) {
         if (stratum_recv_line(ctx, line, sizeof(line)) < 0) break;
         process_line(ctx, line);
         if (ctx->authorized) break;
     }
-
     if (!ctx->authorized) {
         LOG_ERROR("authorization failed");
         goto fail;
     }
 
-    // Set socket non-blocking for poll
+    // Set non-blocking for poll
     int flags = fcntl(ctx->sock, F_GETFL, 0);
     fcntl(ctx->sock, F_SETFL, flags | O_NONBLOCK);
 
@@ -349,11 +352,9 @@ void stratum_disconnect(stratum_ctx_t *ctx) {
 int stratum_poll(stratum_ctx_t *ctx) {
     char line[RECV_BUF_SIZE];
     int  new_job = 0;
-
-    // Non-blocking read — drain all pending lines
     while (1) {
         ssize_t n = recv(ctx->sock, line, 1, MSG_PEEK | MSG_DONTWAIT);
-        if (n <= 0) break; // nothing waiting
+        if (n <= 0) break;
         if (stratum_recv_line(ctx, line, sizeof(line)) < 0) return -1;
         if (process_line(ctx, line) == 1) new_job = 1;
     }
@@ -368,11 +369,8 @@ int stratum_submit(stratum_ctx_t *ctx, const char *job_id,
         "{\"id\":%ld,\"method\":\"mining.submit\","
         "\"params\":[\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"]}",
         ctx->msg_id++,
-        ctx->cfg.user,   // worker name
-        job_id,
-        en2_hex,
-        ntime,
-        nonce_hex);
+        ctx->cfg.user,
+        job_id, en2_hex, ntime, nonce_hex);
     return stratum_send(ctx, msg);
 }
 
@@ -384,52 +382,41 @@ int stratum_build_template(const stratum_ctx_t *ctx,
 
     memset(tmpl, 0, sizeof(block_template_t));
 
-    // Version
     tmpl->version = (uint32_t)strtoul(j->version, NULL, 16);
-
-    // Prev hash
     snprintf(tmpl->prev_hash_hex, sizeof(tmpl->prev_hash_hex), "%s", j->prev_hash);
-
-    // nBits → bits + target
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
     snprintf(tmpl->bits_hex, sizeof(tmpl->bits_hex), "%s", j->nbits);
 
-    // Expand nbits to full 32-byte target hex
-    uint32_t exp   = (tmpl->bits >> 24) & 0xff;
-    uint32_t mant  = tmpl->bits & 0x7fffff;
+    // Expand nbits to full 32-byte target
+    uint32_t exp  = (tmpl->bits >> 24) & 0xff;
+    uint32_t mant = tmpl->bits & 0x7fffff;
     memset(tmpl->target_hex, '0', 64);
     tmpl->target_hex[64] = '\0';
     if (exp >= 3 && exp <= 32) {
         char tmp[8];
         snprintf(tmp, sizeof(tmp), "%06x", mant);
-        int byte_pos = 32 - exp; // position of MSB in 32-byte target
-        int hex_pos  = byte_pos * 2;
-        if (hex_pos >= 0 && hex_pos + 6 <= 64) {
+        int hex_pos = (32 - exp) * 2;
+        if (hex_pos >= 0 && hex_pos + 6 <= 64)
             memcpy(tmpl->target_hex + hex_pos, tmp, 6);
-        }
     }
 
-    // nTime
     tmpl->curtime = (uint32_t)strtoul(j->ntime, NULL, 16);
 
-    // Build extranonce2 hex string (zero-padded to extranonce2_size bytes)
+    // Build extranonce2 hex string
     char en2_hex[32] = {0};
     int  en2_bytes   = j->extranonce2_size;
-    for (int i = en2_bytes - 1; i >= 0; i--) {
-        snprintf(en2_hex + i*2, 3, "%02x", (unsigned)(en2 >> ((en2_bytes-1-i)*8)) & 0xff);
-    }
+    for (int i = en2_bytes - 1; i >= 0; i--)
+        snprintf(en2_hex + i*2, 3, "%02x",
+                 (unsigned)(en2 >> ((en2_bytes-1-i)*8)) & 0xff);
 
-    // Build full coinbase hex: coinb1 + extranonce1 + extranonce2 + coinb2
-    // coinbase_hex = coinb1 + extranonce1 + en2 + coinb2
-    int cb_off = 0;
-    int cb_cap = (int)sizeof(tmpl->coinbase_hex);
+    // coinbase = coinb1 + extranonce1 + en2 + coinb2
+    int cb_off = 0, cb_cap = (int)sizeof(tmpl->coinbase_hex);
     cb_off += snprintf(tmpl->coinbase_hex + cb_off, cb_cap - cb_off, "%s", j->coinb1);
     cb_off += snprintf(tmpl->coinbase_hex + cb_off, cb_cap - cb_off, "%s", j->extranonce1);
     cb_off += snprintf(tmpl->coinbase_hex + cb_off, cb_cap - cb_off, "%s", en2_hex);
               snprintf(tmpl->coinbase_hex + cb_off, cb_cap - cb_off, "%s", j->coinb2);
 
-    // Compute merkle root from coinbase + branch hashes
-    // SHA256d(coinbase) → txid, then iteratively hash with each branch
+    // Merkle root: sha256d(coinbase) then hash with each branch
     uint8_t cb_raw[512];
     int     cb_len = hex_to_bytes(tmpl->coinbase_hex, cb_raw, sizeof(cb_raw));
     if (cb_len < 0) return -1;

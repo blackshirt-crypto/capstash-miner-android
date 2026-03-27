@@ -22,7 +22,7 @@
 #include "miner.h"
 #include "rpc.h"
 
-#define MINER_VERSION "1.0.0"
+#define MINER_VERSION "3.0.0"
 
 // ── ANSI colors ────────────────────────────────────────────────────────
 #define COL_GREEN  "\033[38;5;82m"
