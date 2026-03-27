@@ -66,6 +66,7 @@ add_custom_command(TARGET capstash-miner POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:capstash-miner>
         ${CMAKE_CURRENT_SOURCE_DIR}/capstash-miner
-    COMMAND bash -c "for f in start.sh start-backup.sh reconfigure.sh info.sh; do [ -f ${CMAKE_CURRENT_SOURCE_DIR}/$$f ] && chmod +x ${CMAKE_CURRENT_SOURCE_DIR}/$$f; done; exit 0"
+    COMMAND ${CMAKE_COMMAND} -P
+        ${CMAKE_CURRENT_SOURCE_DIR}/chmod_scripts.cmake
     COMMENT "Copying binary and fixing script permissions..."
 )

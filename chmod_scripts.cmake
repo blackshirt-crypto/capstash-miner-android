@@ -1,0 +1,6 @@
+set(DIR "/data/data/com.termux/files/home/capstash-miner")
+foreach(SCRIPT start.sh start-backup.sh reconfigure.sh info.sh)
+    if(EXISTS "${DIR}/${SCRIPT}")
+        execute_process(COMMAND chmod +x "${DIR}/${SCRIPT}")
+    endif()
+endforeach()
