@@ -225,7 +225,7 @@ static void build_header(const block_template_t *tmpl,
     write_le32(hdr, 0, tmpl->version);
     uint8_t prev[32];
     hex_to_bytes(tmpl->prev_hash_hex, prev, 32);
-    for (int i = 0; i < 32; i++) hdr[4+i] = prev[31-i];
+    memcpy(hdr+4, prev, 32);  // no reversal — match GetPoWHash() byte order
     memcpy(hdr+36, merkle_root, 32);
     write_le32(hdr, 68, tmpl->curtime);
     write_le32(hdr, 72, tmpl->bits);
