@@ -327,7 +327,7 @@ static void *mining_thread(void *arg) {
         pthread_mutex_unlock(&g_template_mutex);
 
         if (!valid) {
-            if (td->thread_id == 0) refresh_template(&td->rpc);
+            if (td->thread_id == 0 && g_config.pool_mode == 0) refresh_template(&td->rpc);
             sleep(1);
             continue;
         }
@@ -407,7 +407,7 @@ static void *mining_thread(void *arg) {
                 }
 
                 // Thread 0 polls for new block
-                if (td->thread_id == 0) {
+                if (td->thread_id == 0 && g_config.pool_mode == 0) {
                     if (rpc_getbestblockhash(&td->rpc, tip_check) == 0) {
                         if (strcmp(tip_check, tip_local) != 0) {
                             LOG_INFO("new block detected — refreshing template");
