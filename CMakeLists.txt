@@ -60,3 +60,16 @@ install(TARGETS capstash-miner DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 message(STATUS "[capstash-miner] Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "[capstash-miner] C flags:    ${CMAKE_C_FLAGS}")
+
+# ── Post-build: copy binary and chmod scripts ─────────────────────────────
+add_custom_command(TARGET capstash-miner POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+        $<TARGET_FILE:capstash-miner>
+        ${CMAKE_CURRENT_SOURCE_DIR}/capstash-miner
+    COMMAND chmod +x
+        ${CMAKE_CURRENT_SOURCE_DIR}/start.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/start-backup.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/reconfigure.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/info.sh
+    COMMENT "Copying binary and fixing script permissions..."
+)
