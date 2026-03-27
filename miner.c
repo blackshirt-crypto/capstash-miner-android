@@ -483,7 +483,7 @@ int miner_start(const miner_config_t *cfg, const miner_callbacks_t *cbs) {
     snprintf(rpc.user, sizeof(rpc.user), "%s", cfg->user);
     snprintf(rpc.pass, sizeof(rpc.pass), "%s", cfg->pass);
 
-    if (refresh_template(&rpc) != 0) {
+    if (cfg->pool_mode == 0 && refresh_template(&rpc) != 0) {
         LOG_ERROR("initial getblocktemplate failed — check node");
         g_running = 0;
         return -1;
