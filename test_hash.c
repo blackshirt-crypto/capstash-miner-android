@@ -83,10 +83,10 @@ bytes_to_hex(out_rev, 32, result);
     bytes_to_hex(cb_txid, 32, txid_hex);
     printf("Coinbase txid:    %s\n", txid_hex);
     // Reverse for merkle root in header
-    uint8_t merkle_rev[32];
-    for (int i = 0; i < 32; i++) merkle_rev[i] = cb_txid[31-i];
+    uint8_t merkle_rev2[32];
+    for (int i = 0; i < 32; i++) merkle_rev2[i] = cb_txid[31-i];
     char merkle_hex2[65];
-    bytes_to_hex(merkle_rev, 32, merkle_hex2);
+    bytes_to_hex(merkle_rev2, 32, merkle_hex2);
     printf("Merkle in header: %s\n", merkle_hex2);
     printf("Actual in header: e2d83e1d59091418477ee1def15dd6b375df4f7d77fd27f3f274b769f325496b\n");
     printf("Merkle match:     %s\n", strcmp(merkle_hex2, "e2d83e1d59091418477ee1def15dd6b375df4f7d77fd27f3f274b769f325496b") == 0 ? "YES ✓" : "NO ✗");
