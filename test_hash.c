@@ -53,5 +53,14 @@ bytes_to_hex(out_rev, 32, result);
     printf("Got:      %s\n", result);
     printf("Match:    %s\n", strcmp(result, expected) == 0 ? "YES ✓" : "NO ✗");
 
+    // Test with live header from miner log
+    const char *live_header_hex = "0000002003b900a828908596c573811cefc3f7d5aef304bf6267a6c6fb15b57ab384adace2d83e1d59091418477ee1def15dd6b375df4f7d77fd27f3f274b769f325496b27dbc7699d2e161b00000000";
+    uint8_t live_hdr[80];
+    hex_to_bytes(live_header_hex, live_hdr, 80);
+    uint8_t live_out[32];
+    capstash_hash(live_hdr, live_out);
+    char live_result[65];
+    bytes_to_hex(live_out, 32, live_result);
+    printf("Live header hash: %s\n", live_result);
     return 0;
 }
