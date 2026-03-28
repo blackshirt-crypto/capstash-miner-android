@@ -348,11 +348,14 @@ static void *mining_thread(void *arg) {
             capstash_hash(header, hash);  // full hash — bypass midstate for debugging
 
             // DEBUG — log occasional hash values to verify hash output
-            if (td->thread_id == 0 && nonce % 0x100000 == 0) {
-            char hash_dbg[65];
-            bytes_to_hex(hash, 32, hash_dbg);
-            LOG_INFO("sample hash: %s", hash_dbg);
-            }
+	if (td->thread_id == 0 && nonce % 0x100000 == 0) {
+    		char hash_dbg[65];
+    		char hdr_hex[161];
+    		bytes_to_hex(hash, 32, hash_dbg);
+    		bytes_to_hex(header, 80, hdr_hex);
+    		LOG_INFO("sample hash: %s", hash_dbg);
+    		LOG_INFO("header:      %s", hdr_hex);
+	}
             if (hash[0] <= target[0]) {
             if (capstash_hash_meets_target(hash, target)) {
             
