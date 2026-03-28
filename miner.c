@@ -325,7 +325,7 @@ static void *mining_thread(void *arg) {
         // ── Build coinbase + merkle root ──────────────────────────────────
         if (g_config.pool_mode == 1) {
             // Pool mode — use stratum coinbase directly
-            if (td->thread_id == 0) LOG_INFO("coinbase_hex: %.64s...", ltmpl.coinbase_hex);
+            if (td->thread_id == 0) LOG_INFO("coinbase_hex len=%d full=%s", (int)strlen(ltmpl.coinbase_hex), ltmpl.coinbase_hex);
             cb_len = hex_to_bytes(ltmpl.coinbase_hex, coinbase, sizeof(coinbase));
             if (cb_len < 0) {
                 LOG_ERROR("coinbase hex decode failed");
