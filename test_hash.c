@@ -68,6 +68,29 @@ bytes_to_hex(out_rev, 32, result);
     bytes_to_hex(live_hdr + 36, 32, merkle_from_hdr);
     printf("Merkle in header: %s\n", merkle_from_hdr);
 
+// Verify merkle root from coinbase (job 00001adf, merkle=0, thread 0)
+    const char *coinb1    = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff2e03f510010465dec76900";
+    const char *en1       = "80000000000012de";
+    const char *en2_str   = "0000000000000000";
+    const char *coinb2    = "134d696e656420427920314d696e65722e4e657400000000020000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900e1f505000000001976a9141dbec89f1504d794f310bde57c008b0f1e271b1b88ac00000000";
+    char full_cb[2048];
+    snprintf(full_cb, sizeof(full_cb), "%s%s%s%s", coinb1, en1, en2_str, coinb2);
+    uint8_t cb_raw[1024];
+    int cb_len = hex_to_bytes(full_cb, cb_raw, sizeof(cb_raw));
+    uint8_t cb_txid[32];
+    sha256d(cb_raw, cb_len, cb_txid);
+    char txid_hex[65];
+    bytes_to_hex(cb_txid, 32, txid_hex);
+    printf("Coinbase txid:    %s\n", txid_hex);
+    // Reverse for merkle root in header
+    uint8_t merkle_rev[32];
+    for (int i = 0; i < 32; i++) merkle_rev[i] = cb_txid[31-i];
+    char merkle_hex2[65];
+    bytes_to_hex(merkle_rev, 32, merkle_hex2);
+    printf("Merkle in header: %s\n", merkle_hex2);
+    printf("Actual in header: e2d83e1d59091418477ee1def15dd6b375df4f7d77fd27f3f274b769f325496b\n");
+    printf("Merkle match:     %s\n", strcmp(merkle_hex2, "e2d83e1d59091418477ee1def15dd6b375df4f7d77fd27f3f274b769f325496b") == 0 ? "YES ✓" : "NO ✗");
+
     return 0;
 }
 
