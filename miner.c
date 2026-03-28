@@ -223,10 +223,15 @@ static void build_header(const block_template_t *tmpl,
                           const uint8_t *merkle_root,
                           uint32_t nonce, uint8_t *hdr) {
     write_le32(hdr, 0, tmpl->version);
-    uint8_t prev[32];
+    // WITH THIS:
+    uint8_t prev[32], prev_rev[32];
     hex_to_bytes(tmpl->prev_hash_hex, prev, 32);
-    memcpy(hdr+4, prev, 32);  // no reversal — match GetPoWHash() byte order
-    memcpy(hdr+36, merkle_root, 32);
+    for (int i = 0; i < 32; i++) prev_rev[i] = prev[31-i];
+    memcpy(hdr+4, prev_rev, 32);
+    // merkle root also needs reversing
+    uint8_t merkle_rev[32];
+    for (int i = 0; i < 32; i++) merkle_rev[i] = merkle_root[31-i];
+    memcpy(hdr+36, merkle_rev, 32);
     write_le32(hdr, 68, tmpl->curtime);
     write_le32(hdr, 72, tmpl->bits);
     write_le32(hdr, 76, nonce);
@@ -333,10 +338,9 @@ static void *mining_thread(void *arg) {
         nonce = (uint32_t)td->thread_id;
         build_header(&ltmpl, merkle_root, nonce, header);
 
-        if (memcmp(merkle_root, last_merkle, 32) != 0) {
-            compute_midstate(header, &mid_ctx);
-            memcpy(last_merkle, merkle_root, 32);
-        }
+        // midstate disabled — full hash per nonce (SPHlib streaming issue)
+        (void)mid_ctx;
+        (void)last_merkle;
 
         // ── Inner nonce loop ──────────────────────────────────────────────
         while (g_running) {
