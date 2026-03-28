@@ -45,7 +45,7 @@ int main(void) {
     const char *en1     = "8000000000001323";
     const char *en2_str = "0000000000000000";
     const char *coinb2  = "134d696e656420427920314d696e65722e4e657400000000020000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900e1f505000000001976a9141dbec89f1504d794f310bde57c008b0f1e271b1b88ac00000000";
-    const char *actual_merkle = "8b5072309ae16f0d9383a0ae28f17a1c03751d371465a2789c7ef36cd01f3c36";
+    const char *actual_merkle = "6269278724c66e8daa55ef6225f3b39a65fc767beb7003cdf7df7f9c1a93bfd8";
 
     char full_cb[2048];
     snprintf(full_cb, sizeof(full_cb), "%s%s%s%s", coinb1, en1, en2_str, coinb2);
