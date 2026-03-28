@@ -62,6 +62,20 @@ install(TARGETS capstash-miner DESTINATION ${CMAKE_INSTALL_PREFIX})
 message(STATUS "[capstash-miner] Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "[capstash-miner] C flags:    ${CMAKE_C_FLAGS}")
 
+# ── Test hash binary ──────────────────────────────────────────────────────
+add_executable(test_hash
+    test_hash.c
+    whirlpool.c
+    sph_whirlpool.c
+    sha256.c
+)
+target_include_directories(test_hash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(TERMUX_BUILD)
+    target_link_libraries(test_hash m)
+else()
+    target_link_libraries(test_hash Threads::Threads m)
+endif()
+
 # ── Post-build: copy binary and chmod scripts ─────────────────────────────
 add_custom_command(TARGET capstash-miner POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
