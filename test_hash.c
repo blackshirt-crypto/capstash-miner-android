@@ -40,11 +40,14 @@ memcpy(header + 36, merkle_rev, 32);
     write_le32(header, 72, bits);
     write_le32(header, 76, nonce);
 
-    uint8_t out[32];
-    capstash_hash(header, out);
+    uint8_t out[32], out_rev[32];
+capstash_hash(header, out);
 
-    char result[65];
-    bytes_to_hex(out, 32, result);
+// Core returns uint256 which displays reversed
+for (int i = 0; i < 32; i++) out_rev[i] = out[31-i];
+
+char result[65];
+bytes_to_hex(out_rev, 32, result);
 
     printf("Expected: %s\n", expected);
     printf("Got:      %s\n", result);
