@@ -7,12 +7,6 @@
 #include <string.h>
 #include "whirlpool.h"
 
-static void write_le32(uint8_t *buf, int off, uint32_t v) {
-    buf[off]   =  v        & 0xff;
-    buf[off+1] = (v >>  8) & 0xff;
-    buf[off+2] = (v >> 16) & 0xff;
-    buf[off+3] = (v >> 24) & 0xff;
-}
 
 int main(void) {
     // Block 69792 fields
