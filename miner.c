@@ -323,13 +323,24 @@ static void *mining_thread(void *arg) {
         if (td->thread_id == 0) LOG_INFO("target: %s", ltmpl.target_hex);
 
         // ── Build coinbase + merkle root ──────────────────────────────────
-        cb_len = build_coinbase(&ltmpl, td->thread_id, en2,
-                                td->address, coinbase, sizeof(coinbase));
-        if (cb_len < 0) {
-            if (g_callbacks.on_error)
-                g_callbacks.on_error("address decode failed", g_callbacks.userdata);
-            g_running = 0;
-            break;
+        if (g_config.pool_mode == 1) {
+            // Pool mode — use stratum coinbase directly
+            cb_len = hex_to_bytes(ltmpl.coinbase_hex, coinbase, sizeof(coinbase));
+            if (cb_len < 0) {
+                LOG_ERROR("coinbase hex decode failed");
+                g_running = 0;
+                break;
+            }
+        } else {
+            // Solo mode — build coinbase from template
+            cb_len = build_coinbase(&ltmpl, td->thread_id, en2,
+                                    td->address, coinbase, sizeof(coinbase));
+            if (cb_len < 0) {
+                if (g_callbacks.on_error)
+                    g_callbacks.on_error("address decode failed", g_callbacks.userdata);
+                g_running = 0;
+                break;
+            }
         }
         compute_txid(coinbase, cb_len, cb_txid);
         memcpy(merkle_root, cb_txid, 32);
@@ -455,10 +466,20 @@ static void *mining_thread(void *arg) {
             }
 
             nonce += (uint32_t)g_thread_count;
-            if (nonce < (uint32_t)td->thread_id) {
+             if (nonce < (uint32_t)td->thread_id) {
                 en2 += (uint64_t)g_thread_count;
                 LOG_INFO("thread %d nonce wrap — en2=%llu",
                          td->thread_id, (unsigned long long)en2);
+                // Rebuild template with new en2 for pool mode
+                if (g_config.pool_mode == 1) {
+                    block_template_t stmpl;
+                    pthread_mutex_lock(&g_template_mutex);
+                    if (stratum_build_template(&g_stratum, en2, &stmpl) == 0) {
+                        memcpy(&g_template, &stmpl, sizeof(stmpl));
+                        g_template_valid = 1;
+                    }
+                    pthread_mutex_unlock(&g_template_mutex);
+                }
                 break;
             }
         }
