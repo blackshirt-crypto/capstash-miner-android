@@ -23,12 +23,19 @@ int main(void) {
     uint8_t header[80];
     uint8_t prev[32], merkle[32];
 
-    hex_to_bytes(prevhash_hex, prev, 32);
-    hex_to_bytes(merkle_hex,   merkle, 32);
+    hhex_to_bytes(prevhash_hex, prev, 32);
+hex_to_bytes(merkle_hex,   merkle, 32);
 
-    write_le32(header, 0, version);
-    memcpy(header + 4,  prev,   32);
-    memcpy(header + 36, merkle, 32);
+// Reverse both — Core uint256 is stored reversed internally
+uint8_t prev_rev[32], merkle_rev[32];
+for (int i = 0; i < 32; i++) {
+    prev_rev[i]   = prev[31-i];
+    merkle_rev[i] = merkle[31-i];
+}
+
+write_le32(header, 0, version);
+memcpy(header + 4,  prev_rev,   32);
+memcpy(header + 36, merkle_rev, 32);
     write_le32(header, 68, ntime);
     write_le32(header, 72, bits);
     write_le32(header, 76, nonce);
