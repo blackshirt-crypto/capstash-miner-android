@@ -216,6 +216,10 @@ static int parse_notify(stratum_ctx_t *ctx, const char *line) {
 
     LOG_INFO("new job id=%s nbits=%s clean=%d merkle=%d",
              j->job_id, j->nbits, j->clean_jobs, j->merkle_count);
+    LOG_INFO("coinb1: %s", j->coinb1);
+    LOG_INFO("coinb2: %s", j->coinb2);
+    for (int i = 0; i < j->merkle_count; i++)
+        LOG_INFO("branch[%d]: %s", i, j->merkle_branch[i]);
     return 0;
 }
 
