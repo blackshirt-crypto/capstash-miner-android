@@ -23,7 +23,7 @@ int main(void) {
     uint8_t header[80];
     uint8_t prev[32], merkle[32];
 
-    hhex_to_bytes(prevhash_hex, prev, 32);
+    hex_to_bytes(prevhash_hex, prev, 32);
 hex_to_bytes(merkle_hex,   merkle, 32);
 
 // Reverse both — Core uint256 is stored reversed internally
