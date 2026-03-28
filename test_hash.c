@@ -62,5 +62,12 @@ bytes_to_hex(out_rev, 32, result);
     char live_result[65];
     bytes_to_hex(live_out, 32, live_result);
     printf("Live header hash: %s\n", live_result);
+
+// Print merkle root from live header (bytes 36-67)
+    char merkle_from_hdr[65];
+    bytes_to_hex(live_hdr + 36, 32, merkle_from_hdr);
+    printf("Merkle in header: %s\n", merkle_from_hdr);
+
     return 0;
 }
+
