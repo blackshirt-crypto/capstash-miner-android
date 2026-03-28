@@ -35,17 +35,24 @@ void capstash_hash_midstate(const whirlpool_ctx *mid,
     sph_whirlpool(&ctx.sph, tail16, 16);
     uint8_t digest[64];
     sph_whirlpool_close(&ctx.sph, digest);
-    // XOR fold 64 -> 32 bytes (matches GetPoWHash)
+    // XOR fold 64 -> 32 bytes then reverse to match Core uint256 byte order
+    uint8_t tmp[32];
     for (int i = 0; i < 32; i++)
-        out32[i] = digest[i] ^ digest[i + 32];
+        tmp[i] = digest[i] ^ digest[i + 32];
+    for (int i = 0; i < 32; i++)
+        out32[i] = tmp[31 - i];
 }
 
 // ── Full header hash (validation path) ───────────────────────────────────
 void capstash_hash(const uint8_t *header, uint8_t *out) {
     uint8_t digest[64];
     whirlpool512(header, 80, digest);
+    // XOR fold 64 -> 32 bytes then reverse to match Core uint256 byte order
+    uint8_t tmp[32];
     for (int i = 0; i < 32; i++)
-        out[i] = digest[i] ^ digest[i + 32];
+        tmp[i] = digest[i] ^ digest[i + 32];
+    for (int i = 0; i < 32; i++)
+        out[i] = tmp[31 - i];
 }
 
 // ── Target comparison — MSB first ─────────────────────────────────────────
