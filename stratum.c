@@ -423,9 +423,10 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     // Build extranonce2 hex string
     char en2_hex[32] = {0};
     int  en2_bytes   = j->extranonce2_size;
-    for (int i = en2_bytes - 1; i >= 0; i--)
+    for (int i = 0; i < en2_bytes; i++)
         snprintf(en2_hex + i*2, 3, "%02x",
                  (unsigned)(en2 >> ((en2_bytes-1-i)*8)) & 0xff);
+    en2_hex[en2_bytes * 2] = '\0';
 
     // coinbase = coinb1 + extranonce1 + en2 + coinb2
     int cb_off = 0, cb_cap = (int)sizeof(tmpl->coinbase_hex);
