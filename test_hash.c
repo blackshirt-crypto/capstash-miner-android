@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "whirlpool.h"
+#include "sha256.h"
 
 
 int main(void) {
