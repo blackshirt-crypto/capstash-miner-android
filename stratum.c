@@ -453,6 +453,7 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     }
 
     bytes_to_hex(hash, 32, tmpl->merkle_root_hex);
+    tmpl->coinbase_en2 = en2;
     return 0;
 }
 
