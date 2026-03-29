@@ -216,10 +216,6 @@ static int parse_notify(stratum_ctx_t *ctx, const char *line) {
 
     LOG_INFO("new job id=%s nbits=%s clean=%d merkle=%d",
              j->job_id, j->nbits, j->clean_jobs, j->merkle_count);
-    LOG_INFO("coinb1: %s", j->coinb1);
-    LOG_INFO("coinb2: %s", j->coinb2);
-    for (int i = 0; i < j->merkle_count; i++)
-        LOG_INFO("branch[%d]: %s", i, j->merkle_branch[i]);
     return 0;
 }
 
@@ -269,9 +265,17 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
         return 0;
     }
 
-    // mining.set_difficulty
+    // mining.set_difficulty — parse and store pool difficulty
     if (strstr(line, "mining.set_difficulty")) {
-        LOG_INFO("set_difficulty received");
+        const char *dp = strstr(line, "\"params\":[");
+        if (dp) {
+            dp += 10;
+            double diff = strtod(dp, NULL);
+            if (diff > 0.0) {
+                ctx->pool_diff = diff;
+                LOG_INFO("set_difficulty: %.6f", diff);
+            }
+        }
         return 0;
     }
 
@@ -391,24 +395,35 @@ int stratum_build_template(const stratum_ctx_t *ctx,
  
     // Store prevhash as-is — build_header() will reverse it
     snprintf(tmpl->prev_hash_hex, sizeof(tmpl->prev_hash_hex), "%s", j->prev_hash);
-    // DEBUG
-    LOG_INFO("prevhash raw: %s", j->prev_hash);
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
     snprintf(tmpl->bits_hex, sizeof(tmpl->bits_hex), "%s", j->nbits);
 
-    // Expand nbits to full 32-byte target (little-endian bytes to match hash compare)
-    uint32_t exp  = (tmpl->bits >> 24) & 0xff;
-    uint32_t mant = tmpl->bits & 0x7fffff;
-    // Build target as 32 raw bytes first, then hex encode little-endian
+    // Compute target — use pool difficulty if set, otherwise fall back to nbits
     uint8_t target_bytes[32];
     memset(target_bytes, 0, 32);
-    if (exp >= 1 && exp <= 32) {
-        // Place mantissa bytes at position (exp-3) counting from LSB (index 0)
-        int pos = (int)exp - 3;
-        if (pos >= 0 && pos + 2 < 32) {
-            target_bytes[pos + 2] = (mant >> 16) & 0xff;
-            target_bytes[pos + 1] = (mant >> 8)  & 0xff;
-            target_bytes[pos + 0] =  mant         & 0xff;
+
+    if (ctx->pool_diff > 0.0) {
+        // CapStash diff1 constant: top 64 bits = 0x01d61c44bdf3ee80
+        // target = diff1 / pool_diff, packed into top 8 bytes of 32-byte BE target
+        double diff1_top = (double)0x01d61c44bdf3ee80ULL;
+        double share_top = diff1_top / ctx->pool_diff;
+        uint64_t top8 = (uint64_t)share_top;
+        // target_bytes index 0 = LSB, so top 8 bytes go at indices 31..24
+        for (int i = 0; i < 8; i++)
+            target_bytes[31 - i] = (top8 >> (i * 8)) & 0xff;
+        LOG_INFO("pool diff=%.6f → target top8=%016llx",
+                 ctx->pool_diff, (unsigned long long)top8);
+    } else {
+        // Fallback: expand nbits to full 32-byte target
+        uint32_t exp  = (tmpl->bits >> 24) & 0xff;
+        uint32_t mant = tmpl->bits & 0x7fffff;
+        if (exp >= 1 && exp <= 32) {
+            int pos = (int)exp - 3;
+            if (pos >= 0 && pos + 2 < 32) {
+                target_bytes[pos + 2] = (mant >> 16) & 0xff;
+                target_bytes[pos + 1] = (mant >> 8)  & 0xff;
+                target_bytes[pos + 0] =  mant         & 0xff;
+            }
         }
     }
     // Hex encode as big-endian (byte 31 first) to match meets_target() comparison

@@ -50,6 +50,7 @@ typedef struct {
     int              subscribed;
     int              authorized;
     long             msg_id;             // JSON-RPC message id counter
+    double           pool_diff;          // current pool difficulty from set_difficulty
 } stratum_ctx_t;
 
 // ── Public API ────────────────────────────────────────────────────────────
