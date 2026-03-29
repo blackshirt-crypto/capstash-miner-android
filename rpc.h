@@ -36,6 +36,7 @@ typedef struct {
     // Pool mode fields — populated by stratum_build_template()
     char     job_id[64];           // stratum job id
     char     ntime_hex[16];        // current time hex (for share submission)
+    uint64_t coinbase_en2;         // en2 value baked into coinbase_hex (pool mode)
 } block_template_t;
 
 // ── Public API ────────────────────────────────────────────────────────────

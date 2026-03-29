@@ -287,7 +287,7 @@ static void *mining_thread(void *arg) {
     uint8_t  coinbase[512];
     uint8_t  cb_txid[32];
     uint8_t  merkle_root[32];
-    uint64_t en2    = (uint64_t)td->thread_id;
+    uint64_t en2    = 0;  // All threads start at 0 — matches template built with en2=0
     uint32_t nonce;
     uint64_t hashes = 0;
     char     tip_local[65] = {0};
@@ -344,7 +344,14 @@ static void *mining_thread(void *arg) {
             }
         }
         compute_txid(coinbase, cb_len, cb_txid);
-        memcpy(merkle_root, cb_txid, 32);
+        if (g_config.pool_mode == 1) {
+            // Pool mode — merkle root already computed (with branches) by stratum_build_template
+            // Do NOT recompute from coinbase alone — that ignores the merkle branch hashing
+            hex_to_bytes(ltmpl.merkle_root_hex, merkle_root, 32);
+        } else {
+            // Solo mode — no branches, merkle root IS the coinbase txid
+            memcpy(merkle_root, cb_txid, 32);
+        }
 
         // ── Build header + midstate ───────────────────────────────────────
         nonce = (uint32_t)td->thread_id;
@@ -380,10 +387,15 @@ static void *mining_thread(void *arg) {
                     if (g_config.pool_mode == 1) {
                         // Pool mode — submit share via stratum
                         char nonce_hex[9];
-                        char en2_hex[17];
+                        // en2_hex must be exactly extranonce2_size bytes wide (pool rejects wrong width)
+                        // Build it the same way stratum_build_template() does
+                        int en2_size = g_stratum.extranonce2_size;
+                        if (en2_size <= 0) en2_size = 4;
+                        char en2_hex[17] = {0};
+                        for (int ei = 0; ei < en2_size; ei++)
+                            snprintf(en2_hex + ei*2, 3, "%02x",
+                                     (unsigned)((en2 >> ((en2_size-1-ei)*8)) & 0xff));
                         snprintf(nonce_hex, sizeof(nonce_hex), "%08x", nonce);
-                        snprintf(en2_hex,   sizeof(en2_hex),
-                                 "%016llx", (unsigned long long)en2);
                         int sub = stratum_submit(&g_stratum,
                                                   ltmpl.job_id,
                                                   ltmpl.ntime_hex,
