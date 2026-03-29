@@ -233,8 +233,8 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
         return 0;
     }
 
-    // Authorize response — id=2
-    if (strstr(line, "\"id\":2") && strstr(line, "\"result\"")) {
+    // Authorize response — id=2, has "result" but not id:20/21 etc
+    if ((strstr(line, "\"id\":2,") || strstr(line, "\"id\": 2,")) && strstr(line, "\"result\"")) {
         if (strstr(line, "\"result\":true") || strstr(line, "\"result\": true")) {
             ctx->authorized = 1;
             LOG_INFO("authorized ✓");

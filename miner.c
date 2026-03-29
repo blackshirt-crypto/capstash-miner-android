@@ -319,13 +319,11 @@ static void *mining_thread(void *arg) {
         }
 
         hex_to_bytes(ltmpl.target_hex, target, 32);
-        // DEBUG — remove after share submission confirmed
-        if (td->thread_id == 0) LOG_INFO("target: %s", ltmpl.target_hex);
+
 
         // ── Build coinbase + merkle root ──────────────────────────────────
         if (g_config.pool_mode == 1) {
             // Pool mode — use stratum coinbase directly
-            if (td->thread_id == 0) LOG_INFO("coinbase_hex len=%d full=%s", (int)strlen(ltmpl.coinbase_hex), ltmpl.coinbase_hex);
             cb_len = hex_to_bytes(ltmpl.coinbase_hex, coinbase, sizeof(coinbase));
             if (cb_len < 0) {
                 LOG_ERROR("coinbase hex decode failed");
@@ -366,15 +364,7 @@ static void *mining_thread(void *arg) {
             write_le32(header, 76, nonce);
             capstash_hash(header, hash);  // full hash — bypass midstate for debugging
 
-            // DEBUG — log occasional hash values to verify hash output
-	if (td->thread_id == 0 && nonce % 0x100000 == 0) {
-    		char hash_dbg[65];
-    		char hdr_hex[161];
-    		bytes_to_hex(hash, 32, hash_dbg);
-    		bytes_to_hex(header, 80, hdr_hex);
-    		LOG_INFO("sample hash: %s", hash_dbg);
-    		LOG_INFO("header:      %s", hdr_hex);
-	}
+
             if (hash[0] <= target[0]) {
             if (capstash_hash_meets_target(hash, target)) {
             
@@ -386,8 +376,14 @@ static void *mining_thread(void *arg) {
 
                     if (g_config.pool_mode == 1) {
                         // Pool mode — submit share via stratum
+                        // Nonce must be submitted little-endian (as it sits in the header)
+                        // ckpool reconstructs the header directly from these bytes
                         char nonce_hex[9];
-                        // en2_hex must be exactly extranonce2_size bytes wide (pool rejects wrong width)
+                        snprintf(nonce_hex, sizeof(nonce_hex), "%02x%02x%02x%02x",
+                                 (nonce      ) & 0xff,
+                                 (nonce >>  8) & 0xff,
+                                 (nonce >> 16) & 0xff,
+                                 (nonce >> 24) & 0xff);
                         // Build it the same way stratum_build_template() does
                         int en2_size = g_stratum.extranonce2_size;
                         if (en2_size <= 0) en2_size = 4;
