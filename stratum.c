@@ -231,7 +231,7 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
     if (!line || !line[0]) return 0;
 
     // Subscribe response — id=1, has "result" array
-    if (strstr(line, "\"id\":1") && strstr(line, "\"result\"")) {
+    if ((strstr(line, "\"id\":1,") || strstr(line, "\"id\":1}")) && strstr(line, "\"result\"")) {
         if (parse_subscribe(ctx, line) == 0)
             ctx->subscribed = 1;
         return 0;
