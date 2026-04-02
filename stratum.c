@@ -216,6 +216,10 @@ static int parse_notify(stratum_ctx_t *ctx, const char *line) {
 
     LOG_INFO("new job id=%s nbits=%s clean=%d merkle=%d",
              j->job_id, j->nbits, j->clean_jobs, j->merkle_count);
+    LOG_INFO("coinb1: %s", j->coinb1);
+    LOG_INFO("coinb2: %s", j->coinb2);
+    for (int i = 0; i < j->merkle_count; i++)
+        LOG_INFO("branch[%d]: %s", i, j->merkle_branch[i]);
     return 0;
 }
 
@@ -233,8 +237,8 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
         return 0;
     }
 
-    // Authorize response — id=2, has "result" but not id:20/21 etc
-    if ((strstr(line, "\"id\":2,") || strstr(line, "\"id\": 2,")) && strstr(line, "\"result\"")) {
+    // Authorize response — id=2
+    if (strstr(line, "\"id\":2") && strstr(line, "\"result\"")) {
         if (strstr(line, "\"result\":true") || strstr(line, "\"result\": true")) {
             ctx->authorized = 1;
             LOG_INFO("authorized ✓");
@@ -245,12 +249,13 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
     }
 
     // Share submit response — has result but no method
-    if ((strstr(line, "\"result\":true") || strstr(line, "\"result\":false")) &&
+    if ((strstr(line, "\"result\":true") || strstr(line, "\"result\":false") ||
+         strstr(line, "\"result\":null")) &&
         !strstr(line, "\"method\"")) {
         if (strstr(line, "\"result\":true"))
             LOG_INFO("share accepted ✓");
         else
-            LOG_WARN("share rejected");
+            LOG_WARN("share rejected — raw: %s", line);
         return 0;
     }
 
@@ -269,7 +274,7 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
     if (strstr(line, "mining.set_difficulty")) {
         const char *dp = strstr(line, "\"params\":[");
         if (dp) {
-            dp += 10;
+            dp += 10;  // skip past "params":[
             double diff = strtod(dp, NULL);
             if (diff > 0.0) {
                 ctx->pool_diff = diff;
@@ -395,6 +400,8 @@ int stratum_build_template(const stratum_ctx_t *ctx,
  
     // Store prevhash as-is — build_header() will reverse it
     snprintf(tmpl->prev_hash_hex, sizeof(tmpl->prev_hash_hex), "%s", j->prev_hash);
+    // DEBUG
+    LOG_INFO("prevhash raw: %s", j->prev_hash);
     tmpl->bits = (uint32_t)strtoul(j->nbits, NULL, 16);
     snprintf(tmpl->bits_hex, sizeof(tmpl->bits_hex), "%s", j->nbits);
 
@@ -403,14 +410,13 @@ int stratum_build_template(const stratum_ctx_t *ctx,
     memset(target_bytes, 0, 32);
 
     if (ctx->pool_diff > 0.0) {
-        // CapStash diff1 constant: top 64 bits = 0x01d61c44bdf3ee80
-        // target = diff1 / pool_diff, packed into top 8 bytes of 32-byte BE target
-        double diff1_top = (double)0x01d61c44bdf3ee80ULL;
+        // Standard Bitcoin stratum diff1 = 0x00000000FFFF0000...
+        // target = diff1 / pool_diff
+        double diff1_top = (double)0x00000000FFFF0000ULL;
         double share_top = diff1_top / ctx->pool_diff;
         uint64_t top8 = (uint64_t)share_top;
-        // target_bytes index 0 = LSB, so top 8 bytes go at indices 31..24
         for (int i = 0; i < 8; i++)
-            target_bytes[31 - i] = (top8 >> (i * 8)) & 0xff;
+            target_bytes[24 + i] = (top8 >> (i * 8)) & 0xff;
         LOG_INFO("pool diff=%.6f → target top8=%016llx",
                  ctx->pool_diff, (unsigned long long)top8);
     } else {
@@ -426,6 +432,7 @@ int stratum_build_template(const stratum_ctx_t *ctx,
             }
         }
     }
+
     // Hex encode as big-endian (byte 31 first) to match meets_target() comparison
     for (int i = 0; i < 32; i++)
         snprintf(tmpl->target_hex + i*2, 3, "%02x", target_bytes[31 - i]);

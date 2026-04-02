@@ -223,15 +223,20 @@ static void build_header(const block_template_t *tmpl,
                           const uint8_t *merkle_root,
                           uint32_t nonce, uint8_t *hdr) {
     write_le32(hdr, 0, tmpl->version);
-    // WITH THIS:
-    uint8_t prev[32], prev_rev[32];
+    // Stratum prevhash is 8x4-byte groups, each group internally byte-swapped
+    // Un-swizzle: reverse bytes within each 4-byte group, keep group order
+    uint8_t prev[32], prev_fix[32];
     hex_to_bytes(tmpl->prev_hash_hex, prev, 32);
-    for (int i = 0; i < 32; i++) prev_rev[i] = prev[31-i];
-    memcpy(hdr+4, prev_rev, 32);
-    // merkle root also needs reversing
-    uint8_t merkle_rev[32];
-    for (int i = 0; i < 32; i++) merkle_rev[i] = merkle_root[31-i];
-    memcpy(hdr+36, merkle_rev, 32);
+    for (int i = 0; i < 32; i += 4) {
+        prev_fix[i+0] = prev[i+3];
+        prev_fix[i+1] = prev[i+2];
+        prev_fix[i+2] = prev[i+1];
+        prev_fix[i+3] = prev[i+0];
+    }
+    memcpy(hdr+4, prev_fix, 32);
+    // Merkle root: use raw bytes directly — no reversal needed
+    // sha256d output is already in correct internal byte order for the header
+    memcpy(hdr+36, merkle_root, 32);
     write_le32(hdr, 68, tmpl->curtime);
     write_le32(hdr, 72, tmpl->bits);
     write_le32(hdr, 76, nonce);
@@ -319,11 +324,13 @@ static void *mining_thread(void *arg) {
         }
 
         hex_to_bytes(ltmpl.target_hex, target, 32);
-
+        // DEBUG — remove after share submission confirmed
+        if (td->thread_id == 0) LOG_INFO("target: %s", ltmpl.target_hex);
 
         // ── Build coinbase + merkle root ──────────────────────────────────
         if (g_config.pool_mode == 1) {
             // Pool mode — use stratum coinbase directly
+            if (td->thread_id == 0) LOG_INFO("coinbase_hex len=%d full=%s", (int)strlen(ltmpl.coinbase_hex), ltmpl.coinbase_hex);
             cb_len = hex_to_bytes(ltmpl.coinbase_hex, coinbase, sizeof(coinbase));
             if (cb_len < 0) {
                 LOG_ERROR("coinbase hex decode failed");
@@ -364,9 +371,20 @@ static void *mining_thread(void *arg) {
             write_le32(header, 76, nonce);
             capstash_hash(header, hash);  // full hash — bypass midstate for debugging
 
-
-            if (hash[0] <= target[0]) {
-            if (capstash_hash_meets_target(hash, target)) {
+            // DEBUG — log occasional hash values to verify hash output
+	if (td->thread_id == 0 && nonce % 0x100000 == 0) {
+    		char hash_dbg[65];
+    		char hdr_hex[161];
+    		bytes_to_hex(hash, 32, hash_dbg);
+    		bytes_to_hex(header, 80, hdr_hex);
+    		LOG_INFO("sample hash: %s", hash_dbg);
+    		LOG_INFO("header:      %s", hdr_hex);
+	}
+            // Reverse hash to big-endian for target comparison
+            uint8_t hash_be[32];
+            for (int _i = 0; _i < 32; _i++) hash_be[_i] = hash[31 - _i];
+            if (hash_be[0] <= target[0]) {
+            if (capstash_hash_meets_target(hash_be, target)) {
             
                     // ── SHARE / BLOCK FOUND ───────────────────────────────
                     char hash_hex[65];
@@ -375,15 +393,16 @@ static void *mining_thread(void *arg) {
                              td->thread_id, ltmpl.height, nonce);
 
                     if (g_config.pool_mode == 1) {
-                        // Pool mode — submit share via stratum
-                        // Nonce must be submitted little-endian (as it sits in the header)
-                        // ckpool reconstructs the header directly from these bytes
+                        // Pool mode — rate limit to 1 submit per 500ms
+                        static struct timespec last_submit = {0, 0};
+                        struct timespec now;
+                        clock_gettime(CLOCK_MONOTONIC, &now);
+                        long elapsed_ms = (now.tv_sec - last_submit.tv_sec) * 1000
+                                        + (now.tv_nsec - last_submit.tv_nsec) / 1000000;
+                        if (elapsed_ms < 500) goto skip_submit;
+                        last_submit = now;
                         char nonce_hex[9];
-                        snprintf(nonce_hex, sizeof(nonce_hex), "%02x%02x%02x%02x",
-                                 (nonce      ) & 0xff,
-                                 (nonce >>  8) & 0xff,
-                                 (nonce >> 16) & 0xff,
-                                 (nonce >> 24) & 0xff);
+                        // en2_hex must be exactly extranonce2_size bytes wide (pool rejects wrong width)
                         // Build it the same way stratum_build_template() does
                         int en2_size = g_stratum.extranonce2_size;
                         if (en2_size <= 0) en2_size = 4;
@@ -422,6 +441,7 @@ static void *mining_thread(void *arg) {
                     }
                 }
             }
+            skip_submit:;
 
             hashes++;
             if (hashes % HASH_BATCH == 0)
