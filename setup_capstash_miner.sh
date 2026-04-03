@@ -46,45 +46,23 @@ echo -e "${AMBER}[1/6] Updating Termux packages...${RESET}"
 pkg update -y -q
 pkg upgrade -y -q
 
-# ── Step 2: Install build dependencies ───────────────────────────────────
-echo -e "${AMBER}[2/6] Installing build dependencies...${RESET}"
-pkg install -y -q clang cmake make git curl pkg-config
-echo -e "${GREEN}✓ Build tools installed${RESET}"
+# ── Step 2: Install dependencies ─────────────────────────────────────────
+echo -e "${AMBER}[2/6] Installing dependencies...${RESET}"
+pkg install -y -q curl
+echo -e "${GREEN}✓ Dependencies installed${RESET}"
 
-# ── Step 3: Clone / update repository ────────────────────────────────────
-echo -e "${AMBER}[3/6] Downloading capstash-miner source...${RESET}"
-if [ -d "$INSTALL_DIR/.git" ]; then
-    echo -e "${DIM}Existing installation found — updating...${RESET}"
-    cd "$INSTALL_DIR"
-    git fetch origin
-    git reset --hard origin/main
-    git clean -fd -q
-else
-    git clone -q "$REPO" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
-fi
-echo -e "${GREEN}✓ Source downloaded${RESET}"
-
-# ── Step 4: Build ─────────────────────────────────────────────────────────
-echo -e "${AMBER}[4/6] Building miner (optimized for your CPU)...${RESET}"
-echo -e "${DIM}This takes 1-3 minutes on most devices...${RESET}"
-
-CPU_INFO=$(grep "Hardware" /proc/cpuinfo 2>/dev/null | head -1 || echo "ARM64")
-echo -e "${DIM}Detected: $CPU_INFO${RESET}"
-
-rm -rf build && mkdir build && cd build
-cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=clang \
-    -DANDROID_BUILD=ON \
-    -DCMAKE_C_FLAGS="-O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops" \
-    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-    > /dev/null 2>&1
-
-make -j$(nproc) 2>&1 | tail -3
-cp capstash-miner "$INSTALL_DIR/capstash-miner"
+# ── Step 3: Create install directory ─────────────────────────────────────
+echo -e "${AMBER}[3/6] Preparing install directory...${RESET}"
+mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
-echo -e "${GREEN}✓ Build successful${RESET}"
+echo -e "${GREEN}✓ Install directory ready${RESET}"
+
+# ── Step 4: Download pre-compiled binary ──────────────────────────────────
+echo -e "${AMBER}[4/6] Downloading capstash-miner v${MINER_VERSION} binary...${RESET}"
+BINARY_URL="https://github.com/scratcher14/capstash-miner-android/releases/download/v${MINER_VERSION}/capstash-miner-android-arm64"
+curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/capstash-miner"
+chmod +x "$INSTALL_DIR/capstash-miner"
+echo -e "${GREEN}✓ Binary downloaded${RESET}"
 
 # ── Step 5: Interactive configuration ─────────────────────────────────────
 echo ""
