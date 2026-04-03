@@ -136,7 +136,6 @@ else
         5) read -p "Backup pool URL: " BACKUP_URL ;;
         *) BACKUP_URL="" ;;
     esac
-    esac
 
     echo ""
     read -p "Worker name (e.g. phone-1): " WORKER_NAME
