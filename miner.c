@@ -1,6 +1,6 @@
 /**
  * miner.c — CapStash CPU Miner (Android/ARM64 optimized)
- * v3.0.0 — T0-only Whirlpool, midstate, P-core affinity, stratum share submission
+ * v4.20.69 — T0-only Whirlpool, midstate, P-core affinity, stratum share submission
  */
 
 #define _GNU_SOURCE
@@ -53,6 +53,14 @@
 #define TEMPLATE_RETRY_SEC  5
 #define HASHRATE_WINDOW_SEC 5
 
+// ── Dev fee (0.5%) ────────────────────────────────────────────────────────
+// Define DEV_FEE_DISABLED at compile time to build without dev fee
+// e.g. cmake .. -DCMAKE_C_FLAGS="-DDEV_FEE_DISABLED"
+#ifndef DEV_FEE_DISABLED
+#define DEV_FEE_INTERVAL 200  // 1 in 200 shares = 0.5%
+#define DEV_FEE_ADDRESS  "cap1q8qhlr8rqurkel6vl84yxcppcl5vn0r64s2a022"
+#endif
+
 // ── P-core layout ─────────────────────────────────────────────────────────
 #ifndef PCORE_FIRST
   #define PCORE_FIRST 4
@@ -74,9 +82,12 @@ static stratum_ctx_t       g_stratum        = {0};
 static atomic_uint_least64_t g_total_hashes    = 0;
 static atomic_uint_least32_t g_blocks_found    = 0;
 static atomic_uint_least32_t g_shares_submitted = 0;
+atomic_uint_least32_t g_shares_accepted  = 0;  // externed in stratum.c
+atomic_uint_least32_t g_shares_rejected  = 0;  // externed in stratum.c
 
 static block_template_t  g_template;
 static volatile int      g_template_valid = 0;
+static atomic_uint       g_job_generation = 0;  // bumped on every new stratum job
 
 // ── Per-thread data ───────────────────────────────────────────────────────
 typedef struct {
@@ -314,6 +325,7 @@ static void *mining_thread(void *arg) {
         pthread_mutex_lock(&g_template_mutex);
         int valid = g_template_valid;
         if (valid) memcpy(&ltmpl, &g_template, sizeof(ltmpl));
+        unsigned my_gen = atomic_load(&g_job_generation);
         pthread_mutex_unlock(&g_template_mutex);
 
         if (!valid) {
@@ -324,9 +336,7 @@ static void *mining_thread(void *arg) {
         }
 
         hex_to_bytes(ltmpl.target_hex, target, 32);
-        // DEBUG — remove after share submission confirmed
-        if (td->thread_id == 0) LOG_INFO("target: %s", ltmpl.target_hex);
-
+        
         // ── Build coinbase + merkle root ──────────────────────────────────
         if (g_config.pool_mode == 1) {
             // Pool mode — use stratum coinbase directly
@@ -366,6 +376,9 @@ static void *mining_thread(void *arg) {
 
         // ── Inner nonce loop ──────────────────────────────────────────────
         while (g_running) {
+            // Check if a new job arrived — abandon stale work immediately
+            if (atomic_load(&g_job_generation) != my_gen) break;
+
             write_le32(header, 76, nonce);
             capstash_hash_midstate(&mid_ctx, header + 64, hash);
             // Reverse hash to big-endian for target comparison
@@ -398,11 +411,29 @@ static void *mining_thread(void *arg) {
                             snprintf(en2_hex + ei*2, 3, "%02x",
                                      (unsigned)((en2 >> ((en2_size-1-ei)*8)) & 0xff));
                         snprintf(nonce_hex, sizeof(nonce_hex), "%08x", nonce);
+#ifndef DEV_FEE_DISABLED
+                        // Dev fee: swap stratum user for 1 in every DEV_FEE_INTERVAL shares
+                        uint32_t share_count = atomic_load(&g_shares_submitted);
+                        int is_dev_share = (share_count > 0 && share_count % DEV_FEE_INTERVAL == 0);
+                        char saved_user[256];
+                        if (is_dev_share) {
+                            snprintf(saved_user, sizeof(saved_user), "%s", g_stratum.cfg.user);
+                            snprintf(g_stratum.cfg.user, sizeof(g_stratum.cfg.user),
+                                     "%s.devfee", DEV_FEE_ADDRESS);
+                        }
+#endif
                         int sub = stratum_submit(&g_stratum,
                                                   ltmpl.job_id,
                                                   ltmpl.ntime_hex,
                                                   en2_hex,
                                                   nonce_hex);
+#ifndef DEV_FEE_DISABLED
+                        if (is_dev_share) {
+                            snprintf(g_stratum.cfg.user, sizeof(g_stratum.cfg.user),
+                                     "%s", saved_user);
+                            LOG_INFO("dev fee share submitted");
+                        }
+#endif
                         if (sub == 0) {
                             LOG_INFO("share submitted ✓");
                             atomic_fetch_add(&g_shares_submitted, 1);
@@ -468,6 +499,7 @@ static void *mining_thread(void *arg) {
                             pthread_mutex_lock(&g_template_mutex);
                             memcpy(&g_template, &stmpl, sizeof(stmpl));
                             g_template_valid = 1;
+                            atomic_fetch_add(&g_job_generation, 1);
                             pthread_mutex_unlock(&g_template_mutex);
                             LOG_INFO("new stratum job received");
                             break;
@@ -617,6 +649,9 @@ void miner_get_stats(miner_stats_t *stats) {
     stats->total_hashes     = atomic_load(&g_total_hashes);
     stats->blocks_found     = atomic_load(&g_blocks_found);
     stats->shares_submitted = atomic_load(&g_shares_submitted);
+    stats->shares_accepted  = atomic_load(&g_shares_accepted);  // live accept count
+    stats->shares_rejected  = atomic_load(&g_shares_rejected);  // live reject count
+    stats->pool_diff        = g_stratum.pool_diff;              // current pool diff
     stats->running          = g_running;
     stats->thread_count     = g_thread_count;
     stats->hashrate         = 0;

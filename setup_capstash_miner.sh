@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  CapStash Miner v3.0.0 — Termux Setup Script
+#  CapStash Miner v4.20.69 — Termux Setup Script
 #  Whirlpool-512 CPU miner for CapStash
 #  github.com/scratcher14/capstash-miner-android
 # ============================================================
@@ -10,7 +10,7 @@ set -e
 INSTALL_DIR="$HOME/capstash-miner"
 REPO="https://github.com/scratcher14/capstash-miner-android"
 CONFIG_FILE="$INSTALL_DIR/mining-config.txt"
-MINER_VERSION="3.0.0"
+MINER_VERSION="4.20.69"
 
 GREEN='\033[38;5;82m'
 AMBER='\033[38;5;214m'
@@ -21,7 +21,7 @@ RESET='\033[0m'
 clear
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════╗${RESET}"
-echo -e "${GREEN}║    CAPSTASH MINER v3.0.0 SETUP            ║${RESET}"
+echo -e "${GREEN}║    CAPSTASH MINER v4.20.69 SETUP          ║${RESET}"
 echo -e "${GREEN}║   Whirlpool-512 · Android CPU Miner       ║${RESET}"
 echo -e "${GREEN}║   github.com/scratcher14                  ║${RESET}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${RESET}"
@@ -204,7 +204,7 @@ TOTAL_CORES=$((P_CORES + E_CORES))
 echo ""
 echo -e "${DIM}Total: $TOTAL_CORES  |  Performance: $P_CORES  |  Efficiency: $E_CORES${RESET}"
 echo ""
-echo -e "${DIM}Hashrate guide (v3.0.0 optimized):${RESET}"
+echo -e "${DIM}Hashrate guide (v4.20.69 optimized):${RESET}"
 echo -e "${DIM}  1 thread → ~1.47 MH/s${RESET}"
 echo -e "${DIM}  2 threads → ~2.94 MH/s${RESET}"
 echo -e "${DIM}  3 threads → ~4.40 MH/s${RESET}"

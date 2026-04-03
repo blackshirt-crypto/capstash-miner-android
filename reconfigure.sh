@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ============================================================
-#  CapStash Miner v3.0 — Reconfiguration Menu
+#  CapStash Miner v4.20.69 — Reconfiguration Menu
 # ============================================================
 
 INSTALL_DIR="$HOME/capstash-miner"
@@ -19,21 +19,21 @@ pick_pool() {
     echo "" >&2
     echo -e "${DIM}Known CapStash pools:${RESET}" >&2
     echo "" >&2
-    echo "  1) capspool.io     — stratum+tcp://pplns.capspool.io:6333" >&2
-    echo "  2) papaspool.net   — stratum+tcp://papaspool.net:7777" >&2
-    echo "  3) crypto-eire.com — stratum+tcp://stratum.crypto-eire.com:3340" >&2
-    echo "  4) 1miner.net      — stratum+tcp://1miner.net:3690" >&2
+    echo "  1) 1miner.net      — stratum+tcp://1miner.net:3690        (CPU friendly)" >&2
+    echo "  2) crypto-eire.com — stratum+tcp://stratum.crypto-eire.com:3340 (CPU friendly)" >&2
+    echo "  3) capspool.io     — stratum+tcp://pplns.capspool.io:6333  (GPU difficulty)" >&2
+    echo "  4) papaspool.net   — stratum+tcp://papaspool.net:7777      (GPU difficulty)" >&2
     echo "  5) Enter manually" >&2
     echo "" >&2
-    echo -e "${AMBER}  ⚠ Not all pools have confirmed low difficulty for mobile miners.${RESET}" >&2
+    echo -e "${AMBER}  ⚠ Pools 3-4 may set difficulty too high for mobile/CPU miners.${RESET}" >&2
     echo -e "${AMBER}    Verify your hashrate after connecting or try another pool.${RESET}" >&2
     echo "" >&2
     read -p "Select pool (1-5): " POOL_CHOICE >&2
     case $POOL_CHOICE in
-        1) echo "stratum+tcp://pplns.capspool.io:6333" ;;
-        2) echo "stratum+tcp://papaspool.net:7777" ;;
-        3) echo "stratum+tcp://stratum.crypto-eire.com:3340" ;;
-        4) echo "stratum+tcp://1miner.net:3690" ;;
+        1) echo "stratum+tcp://1miner.net:3690" ;;
+        2) echo "stratum+tcp://stratum.crypto-eire.com:3340" ;;
+        3) echo "stratum+tcp://pplns.capspool.io:6333" ;;
+        4) echo "stratum+tcp://papaspool.net:7777" ;;
         *)
             # Manual entry — prompt to stderr, result to stdout
             read -p "Pool URL (stratum+tcp://...): " MANUAL_URL >&2
@@ -51,7 +51,7 @@ source "$CONFIG_FILE"
 clear
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════╗${RESET}"
-echo -e "${GREEN}║   CAPSTASH MINER v3.0 — RECONFIGURE       ║${RESET}"
+echo -e "${GREEN}║   CAPSTASH MINER v4.20.69 — RECONFIGUR    ║${RESET}"
 echo -e "${GREEN}╚═══════════════════════════════════════════╝${RESET}"
 echo ""
 echo -e "${DIM}Current configuration:${RESET}"
@@ -204,7 +204,7 @@ esac
 
 # ── Save updated config ───────────────────────────────────────────────────
 cat > "$CONFIG_FILE" << EOF
-# CapStash Miner v3.0.0 Configuration
+# CapStash Miner v4.20.69 Configuration
 # Updated: $(date)
 
 MINING_MODE=$MINING_MODE

@@ -1,6 +1,6 @@
 # capstash-miner — Termux Android build
 cmake_minimum_required(VERSION 3.16)
-project(capstash_miner VERSION 3.0.0 LANGUAGES C)
+project(capstash_miner VERSION 4.20.69 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)

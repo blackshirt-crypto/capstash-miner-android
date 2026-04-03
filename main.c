@@ -21,8 +21,12 @@
 
 #include "miner.h"
 #include "rpc.h"
+#include <stdatomic.h>
 
-#define MINER_VERSION "3.0.0"
+extern atomic_uint_least32_t g_shares_accepted;
+extern atomic_uint_least32_t g_shares_rejected;
+
+#define MINER_VERSION "4.20.69"
 
 // ── ANSI colors ────────────────────────────────────────────────────────
 #define COL_GREEN  "\033[38;5;82m"
@@ -94,17 +98,49 @@ static int parse_url(const char *url, char *host, int *port) {
 // ── Callbacks ──────────────────────────────────────────────────────────
 static void on_hashrate(double hr, void *ud) {
     (void)ud;
-    char buf[32];
-    if      (hr >= 1e9) snprintf(buf, sizeof(buf), "%.2f GH/s", hr / 1e9);
-    else if (hr >= 1e6) snprintf(buf, sizeof(buf), "%.2f MH/s", hr / 1e6);
-    else if (hr >= 1e3) snprintf(buf, sizeof(buf), "%.2f KH/s", hr / 1e3);
-    else                snprintf(buf, sizeof(buf), "%.0f H/s",  hr);
 
+    // Format hashrate
+    char hr_buf[32];
+    if      (hr >= 1e9) snprintf(hr_buf, sizeof(hr_buf), "%.2f GH/s", hr / 1e9);
+    else if (hr >= 1e6) snprintf(hr_buf, sizeof(hr_buf), "%.2f MH/s", hr / 1e6);
+    else if (hr >= 1e3) snprintf(hr_buf, sizeof(hr_buf), "%.2f KH/s", hr / 1e3);
+    else                snprintf(hr_buf, sizeof(hr_buf), "%.0f H/s",  hr);
+
+    // Accepted / rejected counts
+    uint32_t acc = atomic_load(&g_shares_accepted);
+    uint32_t rej = atomic_load(&g_shares_rejected);
+
+    // Pool difficulty via stats struct (0.0 if solo)
+    miner_stats_t stats;
+    miner_get_stats(&stats);
+    double diff = stats.pool_diff;
+
+    // CPU temperature — read from thermal zone 0 (millidegrees → degrees)
+    int temp = 0;
+    FILE *tf = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
+    if (tf) { int r = fscanf(tf, "%d", &temp); (void)r; fclose(tf); temp /= 1000; }
+
+    // Timestamp
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
-    printf("%s[%02d:%02d:%02d]%s hashrate %s%s%s\n",
-           COL_DIM, t->tm_hour, t->tm_min, t->tm_sec, COL_RESET,
-           COL_GREEN, buf, COL_RESET);
+
+    // Compose status line
+    if (diff > 0.0) {
+        // Pool mode — show diff
+        printf("%s[%02d:%02d:%02d]%s %s%s%s | acc %s%u%s rej %s%u%s | diff %.4f | %s%d°C%s\n",
+               COL_DIM,   t->tm_hour, t->tm_min, t->tm_sec, COL_RESET,
+               COL_GREEN, hr_buf, COL_RESET,
+               COL_GREEN, acc,    COL_RESET,
+               rej > 0 ? COL_RED : COL_DIM, rej, COL_RESET,
+               diff,
+               temp > 60 ? COL_AMBER : COL_DIM, temp, COL_RESET);
+    } else {
+        // Solo mode — no diff
+        printf("%s[%02d:%02d:%02d]%s %s%s%s | %s%d°C%s\n",
+               COL_DIM,   t->tm_hour, t->tm_min, t->tm_sec, COL_RESET,
+               COL_GREEN, hr_buf, COL_RESET,
+               temp > 60 ? COL_AMBER : COL_DIM, temp, COL_RESET);
+    }
     fflush(stdout);
 }
 

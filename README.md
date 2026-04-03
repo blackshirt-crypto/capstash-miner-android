@@ -1,11 +1,11 @@
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║  ☢  PIP-BOY 3000 Mk VI  ·  MINING INTERFACE  ·  VAULT-TEC CORP  ☢  ║
+║  ☢  PIP-BOY 3000 Mk VI  ·  MINING INTERFACE  ·  VAULT-TEC CORP  ☢    ║
 ║                                                                      ║
-║        C A P S T A S H   A N D R O I D   M I N E R                 ║
-║                    v3.0.0  ·  WHIRLPOOL-512                         ║
+║        C A P S T A S H   A N D R O I D   M I N E R                   ║
+║                    v4.20.69  ·  WHIRLPOOL-512                        ║
 ║                                                                      ║
-║  [ STATS ]   [ POOLS ]   [ INSTALL ]   [ DATA ]   [ RADIO ]         ║
+║  [ STATS ]   [ POOLS ]   [ INSTALL ]   [ DATA ]   [ RADIO ]          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -21,7 +21,7 @@ For intel on CapStash, tokenomics, and the coin itself, tune your Pip-Boy to:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║  ☢  STATS  ·  v3.0.0 UPGRADE LOG                                    ║
+║  ☢  STATS  ·  v4.20.69 UPGRADE LOG                                   ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -33,7 +33,10 @@ For intel on CapStash, tokenomics, and the coin itself, tune your Pip-Boy to:
 | Stratum pool client | ✅ ONLINE | Full subscribe → authorize → notify → submit pipeline |
 | Auto P-core detect | ✅ ONLINE | Reads /proc/cpuinfo CPU part numbers at setup |
 
-> *Previous field units (v1.0) reported 3.36 MH/s. v3.0.0 units report 5.87 MH/s on identical hardware. Vault-Tec approves.*
+> *Previous field units (v3.0.0) reported 5.87 MH/s. v4.20.69 units report 10+ MH/s on identical hardware with clean display and accepted share tracking. Vault-Tec approves.*
+
+| Clean status display | ✅ ONLINE | Hashrate · accepted · rejected · diff · temp on one line |
+| Dev fee 0.5% | ✅ ONLINE | 1 in 200 shares · disable with `-DDEV_FEE_DISABLED` |
 
 ---
 
@@ -389,6 +392,7 @@ ALGORITHM:      Whirlpool-512 XOR/256
 BLOCK TIME:     ~60 seconds
 BLOCK REWARD:   1 CAP
 RESISTANCE:     GPU-resistant · ASIC-resistant · CPU-optimized
+MAX SUPPLY:     90,000,000,000 CAP
 STATUS:         ACTIVE — chain height 65,000+
 ```
 
@@ -399,21 +403,33 @@ Full intelligence dossier, whitepaper, node firmware, and wallet downloads:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║  ☢  RADIO  ·  SUPPORT & RESOURCES                                   ║
+║  ☢  RADIO  ·  SUPPORT & RESOURCES                                    ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
 | STATION | FREQUENCY |
 |---------|-----------|
+| CapStash Official | [capstash.org](https://capstash.org) — Lore, chain spec, network status |
 | CapStash Core | [github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core) |
+| Explorer | [capstashmempool.codefalcon.dev](https://capstashmempool.codefalcon.dev/) |
+| Discord | [discord.gg/zrzmkwAM7G](https://discord.gg/zrzmkwAM7G) |
 | This Repo | [github.com/scratcher14/capstash-miner-android](https://github.com/scratcher14/capstash-miner-android) |
 | Cell Hasher | [cellhasher.com](https://cellhasher.com/) — Mobile mining community & Discord |
 
 ---
-
-```
 ╔══════════════════════════════════════════════════════════════════════╗
-║  ☢  VAULT-TEC LEGAL DISCLAIMER                                      ║
+║  ☢  DATA  ·  ACKNOWLEDGEMENTS                                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+Special thanks to **1miner** (dankminer v3.0.0) — pool operator at 1miner.net and
+the first outside contributor to this project. His stratum expertise, bug fixes,
+and PR #1 were instrumental in getting shares accepted. If you're looking for a
+CPU-friendly pool with solid support, point your Pip-Boy to `1miner.net:3690`.
+
+---
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  ☢  VAULT-TEC LEGAL DISCLAIMER                                       ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 

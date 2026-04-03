@@ -30,6 +30,9 @@ typedef struct {
     uint64_t total_hashes;
     uint32_t blocks_found;
     uint32_t shares_submitted;
+    uint32_t shares_accepted;
+    uint32_t shares_rejected;
+    double   pool_diff;       // current pool difficulty (0.0 if solo)
     int      running;
     int      thread_count;
 } miner_stats_t;
