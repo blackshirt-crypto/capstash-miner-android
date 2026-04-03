@@ -51,7 +51,7 @@
 #define HASH_BATCH          4096
 #define MAX_THREADS         64
 #define TEMPLATE_RETRY_SEC  5
-#define HASHRATE_WINDOW_SEC 5
+#define HASHRATE_WINDOW_SEC 30
 
 // ── Dev fee (0.5%) ────────────────────────────────────────────────────────
 // Define DEV_FEE_DISABLED at compile time to build without dev fee
@@ -80,6 +80,7 @@ static pthread_mutex_t     g_template_mutex = PTHREAD_MUTEX_INITIALIZER;
 static stratum_ctx_t       g_stratum        = {0};
 
 static atomic_uint_least64_t g_total_hashes    = 0;
+atomic_uint_least64_t g_hashes_since_last_share = 0;  // resets on each accepted share
 static atomic_uint_least32_t g_blocks_found    = 0;
 static atomic_uint_least32_t g_shares_submitted = 0;
 atomic_uint_least32_t g_shares_accepted  = 0;  // externed in stratum.c
@@ -319,7 +320,6 @@ static void *mining_thread(void *arg) {
     uint64_t hr_h0 = 0;
 
     LOG_INFO("thread %d started", td->thread_id);
-
     while (g_running) {
         // ── Grab template ─────────────────────────────────────────────────
         pthread_mutex_lock(&g_template_mutex);
@@ -462,11 +462,13 @@ static void *mining_thread(void *arg) {
             skip_submit:;
 
             hashes++;
-            if (hashes % HASH_BATCH == 0)
+            if (hashes % HASH_BATCH == 0) {
                 atomic_fetch_add(&g_total_hashes, HASH_BATCH);
+                atomic_fetch_add(&g_hashes_since_last_share, HASH_BATCH);
+            }
 
             // ── Periodic maintenance ──────────────────────────────────────
-            if (hashes % MAINTENANCE_EVERY == 0) {
+            if (hashes % 65536 == 0) {
                 time_t  now     = time(NULL);
                 double  elapsed = difftime(now, hr_t0);
                 if (elapsed >= HASHRATE_WINDOW_SEC) {
@@ -613,6 +615,8 @@ int miner_start(const miner_config_t *cfg, const miner_callbacks_t *cbs) {
             g_template_valid = 1;
             pthread_mutex_unlock(&g_template_mutex);
             LOG_INFO("stratum connected — first job received");
+        } else {
+            LOG_ERROR("stratum_build_template failed — no template for threads");
         }
     }
 

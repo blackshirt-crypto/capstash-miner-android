@@ -250,7 +250,9 @@ static int process_line(stratum_ctx_t *ctx, const char *line) {
         !strstr(line, "\"method\"")) {
         if (strstr(line, "\"result\":true")) {
             extern atomic_uint_least32_t g_shares_accepted;
+            extern atomic_uint_least64_t g_hashes_since_last_share;
             atomic_fetch_add(&g_shares_accepted, 1);
+            atomic_store(&g_hashes_since_last_share, 0);  // reset ETA countdown
             LOG_INFO("share accepted ✓");
         } else {
             extern atomic_uint_least32_t g_shares_rejected;

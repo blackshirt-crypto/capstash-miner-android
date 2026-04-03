@@ -114,6 +114,22 @@ static void on_hashrate(double hr, void *ud) {
     miner_stats_t stats;
     miner_get_stats(&stats);
     double diff = stats.pool_diff;
+    // ETA to next share — based on hashes done since last share vs expected
+    extern atomic_uint_least64_t g_hashes_since_last_share;
+    char eta_buf[32] = "";
+    if (diff > 0.0 && hr > 0.0) {
+        double expected_hashes = diff * 4294967296.0;  // diff * 2^32
+        uint64_t done = atomic_load(&g_hashes_since_last_share);
+        double remaining = expected_hashes - (double)done;
+        if (remaining < 0) remaining = 0;
+        double secs = remaining / hr;
+        int m = (int)(secs / 60);
+        int s = (int)(secs) % 60;
+        if (m > 0)
+            snprintf(eta_buf, sizeof(eta_buf), " | ~%dm %02ds", m, s);
+        else
+            snprintf(eta_buf, sizeof(eta_buf), " | ~%ds", s);
+    }
 
     // CPU temperature — read from thermal zone 0 (millidegrees → degrees)
     int temp = 0;
@@ -127,12 +143,12 @@ static void on_hashrate(double hr, void *ud) {
     // Compose status line
     if (diff > 0.0) {
         // Pool mode — show diff
-        printf("%s[%02d:%02d:%02d]%s %s%s%s | acc %s%u%s rej %s%u%s | diff %.4f | %s%d°C%s\n",
+        printf("%s[%02d:%02d:%02d]%s %s%s%s | acc %s%u%s rej %s%u%s | diff %.4f%s | %s%d°C%s\n",
                COL_DIM,   t->tm_hour, t->tm_min, t->tm_sec, COL_RESET,
                COL_GREEN, hr_buf, COL_RESET,
                COL_GREEN, acc,    COL_RESET,
                rej > 0 ? COL_RED : COL_DIM, rej, COL_RESET,
-               diff,
+               diff, eta_buf,
                temp > 60 ? COL_AMBER : COL_DIM, temp, COL_RESET);
     } else {
         // Solo mode — no diff
