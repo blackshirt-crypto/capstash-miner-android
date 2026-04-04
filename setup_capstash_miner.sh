@@ -59,7 +59,7 @@ echo -e "${GREEN}✓ Install directory ready${RESET}"
 
 # ── Step 4: Download pre-compiled binary ──────────────────────────────────
 echo -e "${AMBER}[4/6] Downloading capstash-miner v${MINER_VERSION} binary...${RESET}"
-BINARY_URL="https://github.com/scratcher14/capstash-miner-android-free/releases/download/v${MINER_VERSION}/capstash-miner-android-arm64"
+BINARY_URL="https://github.com/scratcher14/capstash-miner-android/releases/download/v${MINER_VERSION}/capstash-miner"
 curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/capstash-miner"
 chmod +x "$INSTALL_DIR/capstash-miner"
 echo -e "${GREEN}✓ Binary downloaded${RESET}"
