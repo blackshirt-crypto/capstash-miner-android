@@ -1,4 +1,9 @@
 build/
-capstash-miner
 test_diff1
 test_header
+*.c
+*.h
+CMakeLists.txt
+chmod_scripts.cmake
+start-pool.sh
+setup_capstash_miner_linux.sh
