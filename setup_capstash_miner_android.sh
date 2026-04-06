@@ -10,7 +10,7 @@ set -e
 INSTALL_DIR="$HOME/capstash-miner"
 REPO="https://github.com/blackshirt-crypto/capstash-miner-android"
 CONFIG_FILE="$INSTALL_DIR/mining-config.txt"
-MINER_VERSION="4.20.69.1"
+MINER_VERSION="4.20.69"
 
 GREEN='\033[38;5;82m'
 AMBER='\033[38;5;214m'
@@ -59,7 +59,7 @@ echo -e "${GREEN}✓ Install directory ready${RESET}"
 
 # ── Step 4: Download pre-compiled binary ──────────────────────────────────
 echo -e "${AMBER}[4/6] Downloading capstash-miner v${MINER_VERSION} binary...${RESET}"
-BINARY_URL="https://github.com/blackshirt-crypto/capstash-miner-android/releases/download/v${MINER_VERSION}/capstash-miner"
+BINARY_URL="https://github.com/blackshirt-crypto/capstash-miner-android/releases/download/v${MINER_VERSION}/capstash-miner-android-arm64"
 curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/capstash-miner"
 chmod +x "$INSTALL_DIR/capstash-miner"
 echo -e "${GREEN}✓ Binary downloaded${RESET}"
