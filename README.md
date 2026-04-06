@@ -57,7 +57,7 @@ Download from **[F-Droid](https://f-droid.org/en/packages/com.termux/)** only.
 Open Termux and transmit the following:
 
 ```bash
-curl -O https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/setup_capstash_miner.sh && chmod +x setup_capstash_miner.sh && ./setup_capstash_miner.sh
+curl -O https://raw.githubusercontent.com/blackshirt-crypto/capstash-miner-android/main/setup_capstash_miner_android.sh && chmod +x setup_capstash_miner_android.sh && ./setup_capstash_miner_android.sh
 ```
 
 ### STEP 3 — CONFIGURE YOUR UNIT
@@ -276,7 +276,7 @@ Monitor your fleet on the pool dashboard using your wallet address.
 pkg update && pkg upgrade
 pkg install clang cmake make git curl
 
-git clone https://github.com/scratcher14/capstash-miner-android ~/capstash-miner
+git clone https://github.com/blackshirt-crypto/capstash-miner-android ~/capstash-miner
 cd ~/capstash-miner
 
 mkdir build && cd build
@@ -413,7 +413,7 @@ Full intelligence dossier, whitepaper, node firmware, and wallet downloads:
 | CapStash Core | [github.com/CapStash/CapStash-Core](https://github.com/CapStash/CapStash-Core) |
 | Explorer | [capstashmempool.codefalcon.dev](https://capstashmempool.codefalcon.dev/) |
 | Discord | [discord.gg/zrzmkwAM7G](https://discord.gg/zrzmkwAM7G) |
-| This Repo | [github.com/scratcher14/capstash-miner-android](https://github.com/scratcher14/capstash-miner-android) |
+| This Repo | [github.com/blackshirt-crypto/capstash-miner-android](https://github.com/blackshirt-crypto/capstash-miner-android) |
 | Cell Hasher | [cellhasher.com](https://cellhasher.com/) — Mobile mining community & Discord |
 
 ---

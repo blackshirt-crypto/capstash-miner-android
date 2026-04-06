@@ -12,7 +12,7 @@ RED='\033[38;5;196m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-# ── Pool list (synced with setup_capstash_miner.sh) ───────────────────────
+# ── Pool list (synced with setup_capstash_miner_android.sh) ───────────────────────
 pick_pool() {
     # NOTE: All output except the final URL goes to stderr so the
     #       caller's $(...) capture only gets the clean URL string
@@ -187,7 +187,7 @@ case $CHOICE in
     ;;
 
   7)
-    curl -fsSL https://raw.githubusercontent.com/scratcher14/capstash-miner-android/main/setup_capstash_miner.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/blackshirt-crypto/capstash-miner-android/main/setup_capstash_miner_android.sh | bash
     exit 0
     ;;
 
